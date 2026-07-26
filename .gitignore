@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Env & secrets
+.env
+.env.local
+*.pem
+
+# Data runtime
+data/uploads/*
+!data/uploads/.gitkeep
+*.db
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Coverage
+htmlcov/
+.coverage
+coverage/
