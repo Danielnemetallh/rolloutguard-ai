@@ -7,10 +7,15 @@ from rolloutguard_api.core.config import get_settings
 
 settings = get_settings()
 
+connect_args: dict = {}
+if settings.database_url.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     future=True,
+    connect_args=connect_args,
 )
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
 Base = declarative_base()
@@ -22,3 +27,10 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def init_db() -> None:
+    # Import models so metadata is populated
+    import rolloutguard_api.db.models  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)

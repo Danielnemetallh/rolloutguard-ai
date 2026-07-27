@@ -5,10 +5,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from rolloutguard_api.api.analysis import router as analysis_router
+from rolloutguard_api.api.assistant import router as assistant_router
 from rolloutguard_api.api.errors import AppError, app_error_handler
 from rolloutguard_api.api.health import router as health_router
 from rolloutguard_api.core.config import get_settings
 from rolloutguard_api.core.logging import configure_logging, get_logger
+from rolloutguard_api.db.session import init_db
 
 configure_logging()
 log = get_logger(__name__)
@@ -19,6 +22,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     settings.synthetic_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        init_db()
+        log.info("database_ready")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("database_init_failed", error=type(exc).__name__)
     log.info(
         "app_started",
         env=settings.app_env,
@@ -48,6 +56,8 @@ def create_app() -> FastAPI:
     )
     app.add_exception_handler(AppError, app_error_handler)
     app.include_router(health_router)
+    app.include_router(analysis_router)
+    app.include_router(assistant_router)
 
     @app.get("/api/meta")
     def meta() -> dict[str, object]:
@@ -78,7 +88,6 @@ def main() -> None:
     import uvicorn
     from dotenv import load_dotenv
 
-    # backend/src/rolloutguard_api/main.py -> repo root is parents[3]
     env_path = Path(__file__).resolve().parents[3] / ".env"
     load_dotenv(env_path)
 

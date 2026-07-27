@@ -1,0 +1,283 @@
+"""LLM provider abstraction — OpenCode Zen + deterministic mock."""
+
+from __future__ import annotations
+
+import json
+import re
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+
+from rolloutguard_api.core.config import get_settings
+from rolloutguard_api.core.logging import get_logger
+
+log = get_logger(__name__)
+
+
+@dataclass
+class LLMResponse:
+    content: str
+    model: str
+    latency_ms: int
+    raw: dict[str, Any] | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+
+
+class LLMProvider(ABC):
+    name: str
+
+    @abstractmethod
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1200,
+    ) -> LLMResponse:
+        raise NotImplementedError
+
+    def complete_json(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float = 0.0,
+    ) -> dict[str, Any]:
+        response = self.complete(messages, temperature=temperature)
+        return extract_json_object(response.content)
+
+
+class MockLLMProvider(LLMProvider):
+    """Deterministic fixture provider for demos and CI."""
+
+    name = "deterministic-mock"
+
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1200,
+    ) -> LLMResponse:
+        user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+        text = user if isinstance(user, str) else json.dumps(user)
+
+        if tools:
+            # Agent path: request first allowed tool based on question keywords
+            if "threaten" in text.lower() or "september" in text.lower() or "kpi" in text.lower():
+                call = {
+                    "id": "call_mock_1",
+                    "type": "function",
+                    "function": {
+                        "name": "list_findings",
+                        "arguments": json.dumps(
+                            {"severity": "critical", "limit": 3}
+                        ),
+                    },
+                }
+                return LLMResponse(
+                    content="",
+                    model=self.name,
+                    latency_ms=1,
+                    tool_calls=[call],
+                )
+            call = {
+                "id": "call_mock_2",
+                "type": "function",
+                "function": {
+                    "name": "get_portfolio_kpis",
+                    "arguments": json.dumps({}),
+                },
+            }
+            return LLMResponse(content="", model=self.name, latency_ms=1, tool_calls=[call])
+
+        # Explanation path (must win over blocker keyword present inside JSON packets)
+        if "explain this deterministic finding" in text.lower() or '"rule_id"' in text:
+            evidence_ids = re.findall(r"E-[A-Z]+-\d+", text)
+            payload = {
+                "summary": (
+                    "Integration is forecast after the contractual due date; "
+                    "review fibre readiness and replanning options."
+                ),
+                "evidence_ids": evidence_ids[:4] or ["E-CONTRACT-1", "E-SCHEDULE-1"],
+                "blocker_category": "BACKHAUL_READINESS",
+                "proposed_next_action": (
+                    "Confirm whether the fibre-ready date can be advanced "
+                    "or the integration slot must be re-planned."
+                ),
+                "confidence": 0.9,
+                "abstained": False,
+            }
+            if "insufficient" in text.lower() or "abstain" in text.lower():
+                payload = {
+                    "summary": "Insufficient evidence to explain this finding.",
+                    "evidence_ids": [],
+                    "blocker_category": None,
+                    "proposed_next_action": None,
+                    "confidence": 0.2,
+                    "abstained": True,
+                }
+            return LLMResponse(
+                content=json.dumps(payload),
+                model=self.name,
+                latency_ms=1,
+            )
+
+        if "blocker note" in text.lower() or "classify" in text.lower():
+            payload = {
+                "blocker_category": "BACKHAUL_READINESS",
+                "confidence": 0.92,
+                "abstained": False,
+            }
+        elif "map" in text.lower() or "header" in text.lower():
+            payload = {
+                "canonical_field": "forecast_date",
+                "confidence": 0.88,
+                "abstained": False,
+                "rationale": "Header denotes a forecast milestone date",
+            }
+        else:
+            payload = {
+                "summary": "No specialised mock route matched; abstaining.",
+                "evidence_ids": [],
+                "blocker_category": None,
+                "proposed_next_action": None,
+                "confidence": 0.1,
+                "abstained": True,
+            }
+
+        return LLMResponse(
+            content=json.dumps(payload),
+            model=self.name,
+            latency_ms=1,
+        )
+
+
+class OpenCodeZenProvider(LLMProvider):
+    name = "opencode-zen"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        model: str,
+        reasoning_effort: str | None = "medium",
+        timeout_s: float = 90.0,
+    ) -> None:
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.reasoning_effort = (reasoning_effort or "").strip().lower() or None
+        self.timeout_s = timeout_s
+
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 1600,
+    ) -> LLMResponse:
+        import time
+
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if self.reasoning_effort in {"low", "medium", "high"}:
+            payload["reasoning_effort"] = self.reasoning_effort
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        else:
+            # Structured JSON tasks (explain / classify) — improves reliability vs prose.
+            payload["response_format"] = {"type": "json_object"}
+
+        started = time.perf_counter()
+        with httpx.Client(timeout=self.timeout_s) as client:
+            try:
+                response = client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                # Some Zen models reject response_format — retry once without it.
+                if (
+                    not tools
+                    and "response_format" in payload
+                    and exc.response is not None
+                    and exc.response.status_code in {400, 422}
+                ):
+                    payload.pop("response_format", None)
+                    response = client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                    )
+                    response.raise_for_status()
+                else:
+                    raise
+            data = response.json()
+        latency_ms = int((time.perf_counter() - started) * 1000)
+
+        choice = data["choices"][0]["message"]
+        tool_calls = choice.get("tool_calls")
+        content = choice.get("content") or ""
+        return LLMResponse(
+            content=content,
+            model=data.get("model", self.model),
+            latency_ms=latency_ms,
+            raw=data,
+            tool_calls=tool_calls,
+        )
+
+
+def extract_json_object(text: str) -> dict[str, Any]:
+    text = text.strip()
+    if not text:
+        raise ValueError("Empty model response")
+
+    # Strip common markdown code fences before parsing.
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.IGNORECASE)
+    if fenced:
+        text = fenced.group(1).strip()
+
+    try:
+        value = json.loads(text)
+        if isinstance(value, dict):
+            return value
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{[\s\S]*\}", text)
+    if not match:
+        raise ValueError("No JSON object in model response")
+    value = json.loads(match.group(0))
+    if not isinstance(value, dict):
+        raise ValueError("JSON payload is not an object")
+    return value
+
+
+def get_llm_provider(*, force_mock: bool = False) -> LLMProvider:
+    settings = get_settings()
+    if force_mock or not settings.llm_enabled or not settings.opencode_api_key:
+        return MockLLMProvider()
+    return OpenCodeZenProvider(
+        api_key=settings.opencode_api_key,
+        base_url=settings.opencode_base_url,
+        model=settings.opencode_model,
+        reasoning_effort=settings.opencode_reasoning_effort,
+    )

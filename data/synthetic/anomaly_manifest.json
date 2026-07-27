@@ -1,0 +1,291 @@
+{
+  "generated_at": "2026-07-26T18:20:27.538853+00:00",
+  "disclaimer": "Fully synthetic fictional data for demo purposes only.",
+  "site_count": 50,
+  "partner_count": 3,
+  "partners": [
+    {
+      "partner_id": "PARTNER-NORTH",
+      "name": "NordTurm Infrastruktur GmbH"
+    },
+    {
+      "partner_id": "PARTNER-SOUTH",
+      "name": "AlpenLink Deployment AG"
+    },
+    {
+      "partner_id": "PARTNER-EAST",
+      "name": "OstMast Bau & Integration"
+    }
+  ],
+  "files": {
+    "contract": "contract_obligations.xlsx",
+    "schedule": "partner_schedule.xlsx",
+    "status": "site_project_status.xlsx"
+  },
+  "hero_site_id": "DE-NRW-0107",
+  "header_aliases": {
+    "contract_obligations.xlsx": {
+      "site_id": "Standort-ID",
+      "partner_id": "Partner Code",
+      "obligation_code": "Obligation",
+      "contractual_due_date": "Vertragsf\u00e4lligkeit",
+      "sla_days": "SLA Tage",
+      "required_evidence": "Required Evidence",
+      "contract_version": "SOW Version"
+    },
+    "partner_schedule.xlsx": {
+      "site_id": "Site Ref",
+      "milestone_code": "Milestone",
+      "planned_date": "Plan Date",
+      "forecast_date": "Forecast Date",
+      "actual_date": "Actual",
+      "partner_status": "Status",
+      "last_updated_at": "Last Update"
+    },
+    "site_project_status.xlsx": {
+      "site_id": "Location Key",
+      "permit_status": "Permit",
+      "construction_status": "Build Status",
+      "fibre_ready_date": "Fibre Ready",
+      "integration_test_status": "Integration Test",
+      "acceptance_status": "Acceptance",
+      "blocker_comment": "Blocker Notes"
+    }
+  },
+  "obligation_to_milestone": {
+    "PERMIT_READY": "PERMIT",
+    "BUILD_COMPLETE": "CONSTRUCTION",
+    "INT_READY": "INTEGRATION",
+    "ACCEPT_COMPLETE": "ACCEPTANCE"
+  },
+  "rules": [
+    {
+      "rule_id": "DQ-001",
+      "severity": "critical",
+      "description": "Duplicate canonical key with conflicting values"
+    },
+    {
+      "rule_id": "DQ-002",
+      "severity": "warning",
+      "description": "Site missing from a required source"
+    },
+    {
+      "rule_id": "DQ-003",
+      "severity": "warning",
+      "description": "Unparseable or ambiguous date"
+    },
+    {
+      "rule_id": "DQ-004",
+      "severity": "warning",
+      "description": "Unknown status after normalization"
+    },
+    {
+      "rule_id": "SEQ-001",
+      "severity": "critical",
+      "description": "Construction actual precedes permit approval"
+    },
+    {
+      "rule_id": "SEQ-002",
+      "severity": "critical",
+      "description": "Integration forecast/actual precedes fibre-ready date"
+    },
+    {
+      "rule_id": "SEQ-003",
+      "severity": "critical",
+      "description": "Acceptance complete before required test/evidence"
+    },
+    {
+      "rule_id": "STS-001",
+      "severity": "warning",
+      "description": "Completed status has no actual date"
+    },
+    {
+      "rule_id": "STS-002",
+      "severity": "warning",
+      "description": "Actual date exists while status is not completed"
+    },
+    {
+      "rule_id": "SLA-001",
+      "severity": "critical",
+      "description": "Forecast or actual exceeds contractual due date"
+    },
+    {
+      "rule_id": "FRS-001",
+      "severity": "warning",
+      "description": "Source record older than freshness threshold"
+    }
+  ],
+  "anomalies": [
+    {
+      "anomaly_id": "A-HERO-001",
+      "site_id": "DE-NRW-0107",
+      "rule_ids": [
+        "SLA-001",
+        "SEQ-002"
+      ],
+      "severity": "critical",
+      "description": "Integration forecast 20 Sep exceeds contractual due 15 Sep; forecast also precedes fibre-ready 18 Sep relative to planned slot.",
+      "notes": "Primary 10-minute demo scenario"
+    },
+    {
+      "anomaly_id": "A-DQ-002-MISSING-CONTRACT",
+      "site_id": "DE-BE-0003",
+      "rule_ids": [
+        "DQ-002"
+      ],
+      "severity": "critical",
+      "description": "Site appears in schedule/status but not in contract obligations",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-DQ-001-DUP-CONFLICT",
+      "site_id": "DE-HH-0004",
+      "rule_ids": [
+        "DQ-001"
+      ],
+      "severity": "critical",
+      "description": "Duplicate schedule rows with conflicting forecast dates",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-STS-001-NO-ACTUAL",
+      "site_id": "DE-SN-0005",
+      "rule_ids": [
+        "STS-001"
+      ],
+      "severity": "warning",
+      "description": "Completed status has no actual completion date",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-SEQ-003-EARLY-ACCEPT",
+      "site_id": "DE-BW-0006",
+      "rule_ids": [
+        "SEQ-003"
+      ],
+      "severity": "critical",
+      "description": "Acceptance marked complete while integration test still pending",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-SEQ-001-BUILD-BEFORE-PERMIT",
+      "site_id": "DE-NI-0007",
+      "rule_ids": [
+        "SEQ-001"
+      ],
+      "severity": "critical",
+      "description": "Construction actual exists while permit is not approved",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-DQ-003-BAD-DATE",
+      "site_id": "DE-HE-0008",
+      "rule_ids": [
+        "DQ-003"
+      ],
+      "severity": "warning",
+      "description": "Forecast cell contains an ambiguous/unparseable date string",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-FRS-001-STALE",
+      "site_id": "DE-NRW-0009",
+      "rule_ids": [
+        "FRS-001"
+      ],
+      "severity": "warning",
+      "description": "Partner schedule last_updated older than freshness threshold (30 days)",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-DQ-004-UNKNOWN-STATUS",
+      "site_id": "DE-BY-0010",
+      "rule_ids": [
+        "DQ-004"
+      ],
+      "severity": "warning",
+      "description": "Partner status uses unknown vocabulary not in alias map",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-STS-002-ACTUAL-VS-STATUS",
+      "site_id": "DE-BE-0011",
+      "rule_ids": [
+        "STS-002"
+      ],
+      "severity": "warning",
+      "description": "Integration actual date present while partner status is not completed",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-DQ-002-MISSING-STATUS",
+      "site_id": "DE-HH-0012",
+      "rule_ids": [
+        "DQ-002"
+      ],
+      "severity": "warning",
+      "description": "Site present in contract/schedule but missing from project status",
+      "notes": ""
+    },
+    {
+      "anomaly_id": "A-ID-LEADING-ZERO",
+      "site_id": "DE-HH-0077",
+      "rule_ids": [
+        "DQ-001"
+      ],
+      "severity": "warning",
+      "description": "Site ID must remain a string to preserve formatting (leading-zero demo)",
+      "notes": "Generator writes ID as text; parser must not coerce to number"
+    },
+    {
+      "anomaly_id": "A-SLA-001-LATE-FORECAST",
+      "site_id": "DE-NI-0015",
+      "rule_ids": [
+        "SLA-001"
+      ],
+      "severity": "critical",
+      "description": "Forecast exceeds contractual due date",
+      "notes": ""
+    }
+  ],
+  "expected_findings_by_rule": {
+    "SLA-001": [
+      "DE-NRW-0107",
+      "DE-NI-0015"
+    ],
+    "SEQ-002": [
+      "DE-NRW-0107"
+    ],
+    "DQ-002": [
+      "DE-BE-0003",
+      "DE-HH-0012"
+    ],
+    "DQ-001": [
+      "DE-HH-0004",
+      "DE-HH-0077"
+    ],
+    "STS-001": [
+      "DE-SN-0005"
+    ],
+    "SEQ-003": [
+      "DE-BW-0006"
+    ],
+    "SEQ-001": [
+      "DE-NI-0007"
+    ],
+    "DQ-003": [
+      "DE-HE-0008"
+    ],
+    "FRS-001": [
+      "DE-NRW-0009"
+    ],
+    "DQ-004": [
+      "DE-BY-0010"
+    ],
+    "STS-002": [
+      "DE-BE-0011"
+    ]
+  },
+  "freshness_threshold_days": 30,
+  "analysis_as_of": "2026-07-26"
+}

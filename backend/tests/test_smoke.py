@@ -23,4 +23,5 @@ def test_meta_disclaimer() -> None:
 
 def test_engine_configured() -> None:
     assert engine is not None
-    assert "postgresql" in str(engine.url)
+    url = str(engine.url)
+    assert "sqlite" in url or "postgresql" in url

@@ -71,5 +71,29 @@ scripts/          Local run helpers (no Docker)
 cd backend
 uv run pytest
 uv run ruff check src tests
-uv run mypy src
 ```
+
+Live OpenCode Zen smoke (optional, uses `.env` key):
+
+```powershell
+uv run pytest tests/test_live_llm_smoke.py -q
+```
+
+## AI layer
+
+- Deterministic mock is always available (`force_mock` / `LLM_ENABLED=false`)
+- Live provider: OpenCode Zen OpenAI-compatible API
+- Endpoints:
+  - `POST /api/findings/{id}/explain`
+  - `POST /api/assistant/queries`
+  - `POST /api/assistant/classify-blocker`
+  - `GET /api/assistant/status`
+- Agent tools (read-only): portfolio KPIs, list findings, site timeline, rule definition
+
+## Export
+
+```http
+POST /api/analyses/{id}/exports
+```
+
+Writes sanitized `.xlsx` + `.md` under `data/uploads/exports/`.
