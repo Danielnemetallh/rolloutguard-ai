@@ -12,7 +12,7 @@ mobile-network rollout data.
 |---|---|
 | Frontend | React + TypeScript + Vite + TanStack Query |
 | Backend | Python 3.12 + FastAPI + Pydantic + SQLAlchemy |
-| Database | Neon PostgreSQL (no Docker) |
+| Database | SQLite (local demo) or Neon PostgreSQL |
 | Excel | openpyxl + Polars |
 | AI | OpenCode Zen (OpenAI-compatible) + deterministic mock |
 
@@ -20,36 +20,45 @@ mobile-network rollout data.
 
 - Python 3.12+ via [uv](https://github.com/astral-sh/uv)
 - Node.js 20+
-- A free [Neon](https://neon.tech) Postgres project
 
 ## Quick start
 
-1. Copy env and set your Neon connection string:
+1. Copy env (SQLite works offline out of the box; set Neon URL only if needed):
 
 ```powershell
 Copy-Item .env.example .env
-# Edit .env → DATABASE_URL=postgresql+psycopg2://...@...neon.tech/neondb?sslmode=require
 ```
 
-2. Backend:
+2. Install dependencies (first time only):
+
+```powershell
+cd backend; uv sync
+cd ..\frontend; npm ci
+```
+
+3. Backend:
 
 ```powershell
 .\scripts\dev-api.ps1
 ```
 
-3. Frontend (separate terminal):
+4. Frontend (separate terminal):
 
 ```powershell
 .\scripts\dev-web.ps1
 ```
 
-4. Open http://localhost:5173 — API docs at http://127.0.0.1:8000/docs
+5. Open http://localhost:5173 — API docs at http://127.0.0.1:8000/docs
+
+**Demo reset:** `.\scripts\demo-reset.ps1`  
+**Demo script:** [docs/DEMO.md](docs/DEMO.md)  
+**Interview guide (DE):** [docs/INTERVIEW.md](docs/INTERVIEW.md)
 
 ## Scope / non-goals
 
 **In scope:** multi-workbook import, column mapping, reconciliation, versioned
 deterministic rules, findings with cell-level lineage, KPIs, human review,
-grounded AI explanations, read-only agent, Excel export, tests.
+run history/diff, grounded AI explanations, read-only agent, Excel export, tests.
 
 **Out of scope:** real operator data, autonomous writeback, custom model
 training, RAG (pgvector reserved for a later document corpus), containers,
@@ -63,6 +72,7 @@ frontend/         React UI (Vite)
 data/synthetic/   Generated demo workbooks
 data/uploads/     Runtime uploads (gitignored)
 scripts/          Local run helpers (no Docker)
+docs/             Demo + interview guides
 ```
 
 ## Tests
@@ -92,8 +102,10 @@ uv run pytest tests/test_live_llm_smoke.py -q
 
 ## Export
 
+Use the **Export (.xlsx + .md)** button in the UI, or:
+
 ```http
 POST /api/analyses/{id}/exports
 ```
 
-Writes sanitized `.xlsx` + `.md` under `data/uploads/exports/`.
+Writes sanitized files under `data/uploads/exports/`.
