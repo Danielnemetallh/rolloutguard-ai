@@ -36,3 +36,7 @@ Thumbs.db
 htmlcov/
 .coverage
 coverage/
+
+# Local presentation docs (keep copies on disk, not in repo)
+docs/DEMO.md
+docs/INTERVIEW.md
