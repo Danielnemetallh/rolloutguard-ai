@@ -66,54 +66,69 @@ class MockLLMProvider(LLMProvider):
         text = user if isinstance(user, str) else json.dumps(user)
 
         if tools:
-            # Agent path: request first allowed tool based on question keywords
-            if "threaten" in text.lower() or "september" in text.lower() or "kpi" in text.lower():
+            # Agent path: match German demo chips (timeline → list → KPIs)
+            lowered = text.lower()
+            if "timeline" in lowered or "DE-NRW-0107" in text:
+                site_match = re.search(r"DE-[A-Z]+-\d+", text)
+                site_id = site_match.group(0) if site_match else "DE-NRW-0107"
                 call = {
-                    "id": "call_mock_1",
+                    "id": "call_mock_timeline",
+                    "type": "function",
+                    "function": {
+                        "name": "get_site_timeline",
+                        "arguments": json.dumps({"site_id": site_id}),
+                    },
+                }
+            elif (
+                "threaten" in lowered
+                or "september" in lowered
+                or "gefährden" in lowered
+                or "gefaehrden" in lowered
+                or ("kritisch" in lowered and "befund" in lowered)
+            ):
+                call = {
+                    "id": "call_mock_findings",
                     "type": "function",
                     "function": {
                         "name": "list_findings",
-                        "arguments": json.dumps(
-                            {"severity": "critical", "limit": 3}
-                        ),
+                        "arguments": json.dumps({"severity": "critical", "limit": 3}),
                     },
                 }
-                return LLMResponse(
-                    content="",
-                    model=self.name,
-                    latency_ms=1,
-                    tool_calls=[call],
-                )
-            call = {
-                "id": "call_mock_2",
-                "type": "function",
-                "function": {
-                    "name": "get_portfolio_kpis",
-                    "arguments": json.dumps({}),
-                },
-            }
+            else:
+                call = {
+                    "id": "call_mock_kpis",
+                    "type": "function",
+                    "function": {
+                        "name": "get_portfolio_kpis",
+                        "arguments": json.dumps({}),
+                    },
+                }
             return LLMResponse(content="", model=self.name, latency_ms=1, tool_calls=[call])
 
         # Explanation path (must win over blocker keyword present inside JSON packets)
-        if "explain this deterministic finding" in text.lower() or '"rule_id"' in text:
+        if (
+            "explain this deterministic finding" in text.lower()
+            or "erkläre diesen deterministischen befund" in text.lower()
+            or '"rule_id"' in text
+        ):
             evidence_ids = re.findall(r"E-[A-Z]+-\d+", text)
             payload = {
                 "summary": (
-                    "Integration is forecast after the contractual due date; "
-                    "review fibre readiness and replanning options."
+                    "Die Integration ist nach der vertraglichen Fälligkeit geplant; "
+                    "Fibre-Ready und Neuplanung prüfen."
                 ),
                 "evidence_ids": evidence_ids[:4] or ["E-CONTRACT-1", "E-SCHEDULE-1"],
                 "blocker_category": "BACKHAUL_READINESS",
                 "proposed_next_action": (
-                    "Confirm whether the fibre-ready date can be advanced "
-                    "or the integration slot must be re-planned."
+                    "Prüfen, ob das Fibre-Ready-Datum vorgezogen werden kann "
+                    "oder der Integrationsslot neu geplant werden muss."
                 ),
                 "confidence": 0.9,
                 "abstained": False,
             }
             if "insufficient" in text.lower() or "abstain" in text.lower():
                 payload = {
-                    "summary": "Insufficient evidence to explain this finding.",
+                    "summary": "Unzureichende Evidenz, um diesen Befund zu erklären.",
                     "evidence_ids": [],
                     "blocker_category": None,
                     "proposed_next_action": None,
@@ -137,11 +152,11 @@ class MockLLMProvider(LLMProvider):
                 "canonical_field": "forecast_date",
                 "confidence": 0.88,
                 "abstained": False,
-                "rationale": "Header denotes a forecast milestone date",
+                "rationale": "Spalte bezeichnet ein Forecast-Meilensteindatum",
             }
         else:
             payload = {
-                "summary": "No specialised mock route matched; abstaining.",
+                "summary": "Kein spezieller Mock-Pfad getroffen; Enthaltung.",
                 "evidence_ids": [],
                 "blocker_category": None,
                 "proposed_next_action": None,

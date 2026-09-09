@@ -37,7 +37,7 @@ def test_explain_finding_mock_grounds_evidence() -> None:
     result = explain_finding(
         rule_id="SLA-001",
         severity="critical",
-        message="Forecast exceeds contractual due date.",
+        message="Forecast liegt nach der vertraglichen Fälligkeit.",
         facts={"forecast_date": "2026-09-20", "contractual_due_date": "2026-09-15"},
         evidence=evidence,
         blocker_comment="Backhaul handover moved by supplier",
@@ -78,14 +78,14 @@ def test_explain_fallback_when_llm_raises() -> None:
     result = explain_finding(
         rule_id="SLA-001",
         severity="critical",
-        message="Forecast exceeds contractual due date.",
+        message="Forecast liegt nach der vertraglichen Fälligkeit.",
         facts={"forecast_date": "2026-09-20"},
         evidence=evidence,
         provider=BrokenProvider(),
     )
     assert result.abstained is False
     assert "E-SCHEDULE-1" in result.evidence_ids
-    assert "Forecast exceeds" in result.summary
+    assert "Forecast liegt nach" in result.summary
 
 
 def test_blocker_classification_backhaul() -> None:
@@ -97,7 +97,7 @@ def test_blocker_classification_backhaul() -> None:
     assert out["abstained"] is False
 
 
-def test_agent_answers_critical_sites() -> None:
+def _run_agent_on_synthetic(question: str):
     client = TestClient(create_app())
     projects = client.get("/api/projects").json()
     project_id = projects[0]["id"]
@@ -108,15 +108,35 @@ def test_agent_answers_critical_sites() -> None:
 
     db = SessionLocal()
     try:
-        answer = run_agent(
+        return run_agent(
             db,
             analysis_run_id=analysis_id,
-            question="Which three sites most threaten the September integration target, and why?",
+            question=question,
             provider=MockLLMProvider(),
         )
     finally:
         db.close()
 
+
+def test_agent_answers_critical_sites() -> None:
+    answer = _run_agent_on_synthetic(
+        "Welche drei Standorte gefährden das September-Integrationsziel — und warum?",
+    )
     assert answer.abstained is False
     assert answer.site_ids or "DE-" in answer.answer
-    assert answer.tool_trace
+    assert "list_findings" in answer.tool_trace
+
+
+def test_agent_chip_lists_critical_findings() -> None:
+    answer = _run_agent_on_synthetic("Liste alle kritischen Befunde dieses Laufs.")
+    assert "list_findings" in answer.tool_trace
+
+
+def test_agent_chip_loads_site_timeline() -> None:
+    answer = _run_agent_on_synthetic("Zeige die Timeline für DE-NRW-0107.")
+    assert "get_site_timeline" in answer.tool_trace
+
+
+def test_agent_generic_question_uses_kpis() -> None:
+    answer = _run_agent_on_synthetic("Wie viele Standorte sind im Portfolio?")
+    assert "get_portfolio_kpis" in answer.tool_trace

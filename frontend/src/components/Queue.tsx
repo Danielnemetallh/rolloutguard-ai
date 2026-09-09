@@ -1,3 +1,9 @@
+import { Search } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { severityBadgeVariant, severityLabel } from '@/lib/labels'
+import { cn } from '@/lib/utils'
 import type { Finding, HeroFinding, SortKey } from '../types'
 
 type QueueProps = {
@@ -9,7 +15,6 @@ type QueueProps = {
   severity: string
   sortKey: SortKey
   sortDir: 'asc' | 'desc'
-  selectedId: number | null
   heroFindings: HeroFinding[] | undefined
   showHeroHints: boolean
   onSearchChange: (value: string) => void
@@ -18,6 +23,12 @@ type QueueProps = {
   onSelect: (finding: Finding) => void
   onHeroSelect: (hero: HeroFinding) => void
 }
+
+const SEVERITY_FILTERS = [
+  { value: '', label: 'Alle' },
+  { value: 'critical', label: 'Kritisch' },
+  { value: 'warning', label: 'Warnung' },
+] as const
 
 function sortIndicator(active: boolean, dir: 'asc' | 'desc') {
   if (!active) return ''
@@ -33,7 +44,6 @@ export function Queue({
   severity,
   sortKey,
   sortDir,
-  selectedId,
   heroFindings,
   showHeroHints,
   onSearchChange,
@@ -43,97 +53,128 @@ export function Queue({
   onHeroSelect,
 }: QueueProps) {
   return (
-    <section className="queue-panel" aria-label="Findings queue">
-      <div className="panel-head">
-        <h2>
-          Findings
+    <Card className="flex min-h-[420px] flex-col overflow-hidden" aria-label="Befunde">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h2 className="font-heading text-sm font-semibold">
+          Befunde
           {totalCount != null && ` (${visibleCount}/${totalCount})`}
         </h2>
       </div>
+
       {analysisId != null && (
-        <div className="queue-toolbar">
-          <input
-            type="search"
-            className="search-box"
-            placeholder="Search site, rule, or message…"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
-          <select value={severity} onChange={(e) => onSeverityChange(e.target.value)}>
-            <option value="">All severities</option>
-            <option value="critical">Critical</option>
-            <option value="warning">Warning</option>
-          </select>
+        <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
+          <div className="flex rounded-md border border-border p-0.5">
+            {SEVERITY_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => onSeverityChange(f.value)}
+                className={cn(
+                  'rounded-[5px] px-3 py-1.5 text-sm transition-colors active:scale-[0.98]',
+                  severity === f.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative min-w-[12rem] flex-1">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              strokeWidth={2}
+            />
+            <Input
+              type="search"
+              className="pl-8"
+              placeholder="Standort, Regel oder Meldung…"
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+            />
+          </div>
         </div>
       )}
-      <div className="queue-body">
+
+      <div className="flex-1 overflow-auto px-4 pb-4">
         {!analysisId && (
-          <p className="queue-empty">Run analysis to populate the exception queue.</p>
-        )}
-        {analysisId != null && !findings.length && !showHeroHints && (
-          <p className="queue-empty">
-            {search.trim()
-              ? `No findings match "${search}".`
-              : 'No findings in this run.'}
+          <p className="py-6 text-sm text-muted-foreground">
+            Analyse starten, um die Ausnahme-Warteschlange zu füllen.
           </p>
         )}
+        {analysisId != null && !findings.length && !showHeroHints && (
+          <p className="py-6 text-sm text-muted-foreground">
+            {search.trim()
+              ? `Keine Befunde für „${search}".`
+              : 'Keine Befunde in diesem Lauf.'}
+          </p>
+        )}
+
         {showHeroHints && heroFindings && heroFindings.length > 0 && (
-          <div className="hero-hints-block">
-            <span className="hero-hints-label">Top findings from this run</span>
-            <ul className="hero-hints">
+          <div className="mb-4 pt-3">
+            <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+              Top-Befunde dieses Laufs
+            </p>
+            <ul className="space-y-2">
               {heroFindings.slice(0, 3).map((h, i) => (
                 <li key={`${h.site_id}-${h.rule_id}-${i}`}>
                   <button
                     type="button"
-                    className="hero-hint-btn"
                     onClick={() => onHeroSelect(h)}
+                    className="w-full rounded-md border border-border bg-muted/50 p-3 text-left text-sm transition-colors hover:bg-accent/60"
                   >
-                    <span className={`sev ${h.severity}`}>{h.severity}</span>{' '}
-                    <span className="mono">{h.site_id}</span>{' '}
-                    <span className="mono">{h.rule_id}</span>
-                    <br />
-                    {h.message}
+                    <Badge variant={severityBadgeVariant(h.severity)} className="mr-1">
+                      {severityLabel(h.severity)}
+                    </Badge>
+                    <span className="font-mono text-xs">{h.site_id}</span>{' '}
+                    <span className="font-mono text-xs">{h.rule_id}</span>
+                    <p className="mt-1 text-muted-foreground">{h.message}</p>
                   </button>
                 </li>
               ))}
             </ul>
           </div>
         )}
+
         {findings.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th onClick={() => onToggleSort('severity')}>
-                  Severity{sortIndicator(sortKey === 'severity', sortDir)}
-                </th>
-                <th onClick={() => onToggleSort('site_id')}>
-                  Site{sortIndicator(sortKey === 'site_id', sortDir)}
-                </th>
-                <th onClick={() => onToggleSort('rule_id')}>
-                  Rule{sortIndicator(sortKey === 'rule_id', sortDir)}
-                </th>
-                <th>Message</th>
-              </tr>
-            </thead>
-            <tbody>
-              {findings.map((f) => (
-                <tr
-                  key={f.id}
-                  className={selectedId === f.id ? 'selected' : ''}
-                  onClick={() => onSelect(f)}
-                >
-                  <td>
-                    <span className={`sev ${f.severity}`}>{f.severity}</span>
-                  </td>
-                  <td className="mono">{f.site_id}</td>
-                  <td className="mono">{f.rule_id}</td>
-                  <td>{f.message}</td>
+          <div className="overflow-hidden rounded-md border border-border">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="cursor-pointer px-3 py-2" onClick={() => onToggleSort('severity')}>
+                    Schwere{sortIndicator(sortKey === 'severity', sortDir)}
+                  </th>
+                  <th className="cursor-pointer px-3 py-2" onClick={() => onToggleSort('site_id')}>
+                    Standort{sortIndicator(sortKey === 'site_id', sortDir)}
+                  </th>
+                  <th className="cursor-pointer px-3 py-2" onClick={() => onToggleSort('rule_id')}>
+                    Regel{sortIndicator(sortKey === 'rule_id', sortDir)}
+                  </th>
+                  <th className="px-3 py-2">Meldung</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {findings.map((f) => (
+                  <tr
+                    key={f.id}
+                    className="cursor-pointer border-b border-border transition-colors hover:bg-muted/50"
+                    onClick={() => onSelect(f)}
+                  >
+                    <td className="px-3 py-2">
+                      <Badge variant={severityBadgeVariant(f.severity)}>
+                        {severityLabel(f.severity)}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">{f.site_id}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{f.rule_id}</td>
+                    <td className="px-3 py-2">{f.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
-    </section>
+    </Card>
   )
 }

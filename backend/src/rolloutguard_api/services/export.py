@@ -30,7 +30,7 @@ def export_analysis(
     analysis_run_id: int,
     *,
     output_dir: Path,
-    created_by: str = "Demo Analyst",
+    created_by: str = "Demo-Analystin",
 ) -> dict[str, Any]:
     run = db.get(models.AnalysisRun, analysis_run_id)
     if not run:

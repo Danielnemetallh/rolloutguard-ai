@@ -87,7 +87,7 @@ def test_live_explain_finding_deepseek() -> None:
     result = explain_finding(
         rule_id="SLA-001",
         severity="critical",
-        message="Forecast exceeds contractual due date.",
+        message="Forecast liegt nach der vertraglichen Fälligkeit.",
         facts={"forecast_date": "2026-09-20", "contractual_due_date": "2026-09-15"},
         evidence=evidence,
         blocker_comment="Backhaul handover moved by supplier",

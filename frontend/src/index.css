@@ -1,27 +1,85 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource-variable/jost';
+
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-heading: 'Jost Variable', ui-sans-serif, system-ui, sans-serif;
 }
 
-html {
-  -webkit-text-size-adjust: 100%;
+:root {
+  --background: #f3efe6;
+  --foreground: #1c1a16;
+  --card: #fffdf8;
+  --card-foreground: #1c1a16;
+  --primary: #0f5c4c;
+  --primary-foreground: #f7f3ea;
+  --secondary: #eee9df;
+  --secondary-foreground: #1c1a16;
+  --muted: #eee9df;
+  --muted-foreground: #5c564c;
+  --accent: #e8f2ee;
+  --accent-foreground: #0f5c4c;
+  --destructive: #8a1f1f;
+  --destructive-foreground: #f7f3ea;
+  --border: #d9d2c4;
+  --input: #d9d2c4;
+  --ring: #0f5c4c;
+  --radius: 0.5rem;
+  --critical: #8a1f1f;
+  --critical-bg: #f8eaea;
+  --warn: #8a5a12;
+  --warn-bg: #f8f0e2;
+  --approved: #0f5c4c;
+  --approved-bg: #eef7f3;
 }
 
-body {
-  margin: 0;
-  min-height: 100svh;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --font-heading: var(--font-heading);
 }
 
-#root {
-  min-height: 100svh;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans antialiased;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground m-0 min-h-dvh;
+  }
+  #root {
+    @apply min-h-dvh;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -29,7 +87,6 @@ textarea {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }

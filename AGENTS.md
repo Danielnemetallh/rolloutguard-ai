@@ -5,7 +5,7 @@ RolloutGuard AI reconciles three Excel workbooks (contract, schedule, site statu
 ## Project Structure & Module Organization
 
 - `backend/src/rolloutguard_api/` — FastAPI app. Pipeline: `services/ingest.py` → `normalize.py` → `reconcile.py` → `rules.py` → `analysis.py`. AI lives in `ai/` (provider, enrichment, 4-tool agent). Domain schema + synthetic generator in `domain/`.
-- `frontend/src/` — single React + TanStack Query UI (`App.tsx`); Vite proxies `/api` to the backend.
+- `frontend/src/` — React + TanStack Query workbench (German demo UI): `pages/Leitstand.tsx` (queue), `pages/FindingPage.tsx` (`/befund/:id`), state in `context/WorkbenchContext.tsx` + `hooks/`. Vite proxies `/api` to the backend.
 - `data/synthetic/` — checked-in demo workbooks + anomaly manifest; `data/uploads/` is runtime-only (gitignored).
 - `scripts/` — PowerShell local runners (`dev-api.ps1`, `dev-web.ps1`, `generate-synthetic.ps1`, `demo-reset.ps1`).
 - Root `.env` (from `.env.example`) is loaded by `scripts/dev-api.ps1`. SQLite works offline; Neon Postgres is preferred for shared demos.

@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     # Prefer Neon Postgres in .env. SQLite is a local/dev fallback when Neon is unset.
     database_url: str = "sqlite:///./rolloutguard.db"
-    demo_user_name: str = "Demo Analyst"
-    demo_user_role: str = "analyst"
+    demo_user_name: str = "Demo-Analystin"
+    demo_user_role: str = "Analystin"
     opencode_api_key: str = ""
     opencode_base_url: str = "https://opencode.ai/zen/v1"
     opencode_model: str = "deepseek-v4-flash-free"

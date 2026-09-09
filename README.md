@@ -50,6 +50,8 @@ cd ..\frontend; npm ci
 
 5. Open http://localhost:5173 — API docs at http://127.0.0.1:8000/docs
 
+The demo UI and walkthrough scripts ([docs/DEMO.md](docs/DEMO.md), [docs/INTERVIEW.md](docs/INTERVIEW.md)) are in **German**; API paths and rule IDs stay English.
+
 **Demo reset:** `.\scripts\demo-reset.ps1`  
 **Demo script:** [docs/DEMO.md](docs/DEMO.md)  
 **Interview guide (DE):** [docs/INTERVIEW.md](docs/INTERVIEW.md)

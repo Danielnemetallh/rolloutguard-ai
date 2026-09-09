@@ -32,6 +32,16 @@ class Finding:
 
 RuleFn = Callable[[CanonicalSite, date], list[Finding]]
 
+_DATE_LABELS = {
+    "planned_date": "geplant",
+    "forecast_date": "Forecast",
+    "actual_date": "Ist",
+}
+
+
+def _date_label(field: str) -> str:
+    return _DATE_LABELS.get(field, field)
+
 
 def _finding(
     rule_id: str,
@@ -61,7 +71,7 @@ def rule_dq_001(site: CanonicalSite, _as_of: date) -> list[Finding]:
             _finding(
                 "DQ-001",
                 site,
-                "Duplicate schedule rows with conflicting forecast dates.",
+                "Doppelte Planzeilen mit widersprüchlichen Forecast-Daten.",
                 {
                     "forecasts": [d.isoformat() for d in site.conflicting_forecasts],
                 },
@@ -81,7 +91,7 @@ def rule_dq_002(site: CanonicalSite, _as_of: date) -> list[Finding]:
         _finding(
             "DQ-002",
             site,
-            f"Site missing from required source(s): {', '.join(missing)}.",
+            f"Standort fehlt in erforderlicher(n) Quelle(n): {', '.join(missing)}.",
             {"missing_sources": missing, "present": sorted(site.sources_present)},
             severity=severity,
         )
@@ -95,7 +105,7 @@ def rule_dq_003(site: CanonicalSite, _as_of: date) -> list[Finding]:
         _finding(
             "DQ-003",
             site,
-            "Unparseable or ambiguous date value(s) in source workbook.",
+            "Nicht lesbares oder mehrdeutiges Datum in der Quelldatei.",
             {"bad_cells": [e.evidence_id for e in site.date_errors]},
             evidence=site.date_errors,
         )
@@ -108,7 +118,7 @@ def rule_dq_004(site: CanonicalSite, _as_of: date) -> list[Finding]:
             _finding(
                 "DQ-004",
                 site,
-                f"Unknown partner status vocabulary: {site.partner_status!r}.",
+                f"Unbekanntes Partner-Status-Vokabular: {site.partner_status!r}.",
                 {"raw_status": site.partner_status},
             )
         ]
@@ -128,7 +138,7 @@ def rule_seq_001(site: CanonicalSite, _as_of: date) -> list[Finding]:
             _finding(
                 "SEQ-001",
                 site,
-                "Construction marked complete while permit is not approved.",
+                "Bau als abgeschlossen markiert, obwohl die Genehmigung nicht erteilt ist.",
                 {
                     "permit_status": site.permit_status,
                     "construction_status": site.construction_status,
@@ -153,7 +163,7 @@ def rule_seq_002(site: CanonicalSite, _as_of: date) -> list[Finding]:
                 _finding(
                     "SEQ-002",
                     site,
-                    f"Integration {label.replace('_', ' ')} precedes fibre-ready date.",
+                    f"Integrationsdatum ({_date_label(label)}) liegt vor dem Fibre-Ready-Datum.",
                     {
                         label: value.isoformat(),
                         "fibre_ready_date": fibre.isoformat(),
@@ -177,7 +187,7 @@ def rule_seq_003(site: CanonicalSite, _as_of: date) -> list[Finding]:
             _finding(
                 "SEQ-003",
                 site,
-                "Acceptance complete before required integration test evidence.",
+                "Abnahme abgeschlossen, obwohl der Integrationstest fehlt.",
                 {
                     "acceptance_status": site.acceptance_status,
                     "integration_test_status": site.integration_test_status,
@@ -194,7 +204,7 @@ def rule_sts_001(site: CanonicalSite, _as_of: date) -> list[Finding]:
             _finding(
                 "STS-001",
                 site,
-                "Completed status has no actual date.",
+                "Status „fertig“, aber kein Ist-Datum vorhanden.",
                 {"partner_status": site.partner_status, "actual_date": None},
             )
         ]
@@ -211,7 +221,7 @@ def rule_sts_002(site: CanonicalSite, _as_of: date) -> list[Finding]:
             _finding(
                 "STS-002",
                 site,
-                "Actual date exists while status is not completed.",
+                "Ist-Datum vorhanden, obwohl der Status nicht abgeschlossen ist.",
                 {
                     "actual_date": site.actual_date.isoformat(),
                     "partner_status": site.partner_status,
@@ -232,7 +242,7 @@ def rule_sla_001(site: CanonicalSite, _as_of: date) -> list[Finding]:
                 _finding(
                     "SLA-001",
                     site,
-                    f"{label.replace('_', ' ').title()} exceeds contractual due date.",
+                    f"{_date_label(label)} liegt nach der vertraglichen Fälligkeit.",
                     {
                         label: value.isoformat(),
                         "contractual_due_date": due.isoformat(),
@@ -262,7 +272,7 @@ def rule_frs_001(
             _finding(
                 "FRS-001",
                 site,
-                f"Source record is {age} days old (threshold {threshold_days}).",
+                f"Quelldatensatz ist {age} Tage alt (Schwelle {threshold_days}).",
                 {
                     "last_updated_at": site.last_updated_at.isoformat(),
                     "age_days": age,

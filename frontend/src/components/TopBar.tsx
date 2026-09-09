@@ -1,7 +1,8 @@
-import type { Meta } from '../types'
+import { Link } from 'react-router-dom'
+import { Mark } from '@/components/Mark'
+import { Button } from '@/components/ui/button'
 
 type TopBarProps = {
-  meta: Meta | undefined
   isLoading: boolean
   error: Error | null
   analysisId: number | null
@@ -13,7 +14,6 @@ type TopBarProps = {
 }
 
 export function TopBar({
-  meta,
   isLoading,
   error,
   analysisId,
@@ -24,49 +24,44 @@ export function TopBar({
   onExport,
 }: TopBarProps) {
   return (
-    <header className="topbar">
-      <div className="topbar-brand">
-        <div className="topbar-mark" aria-hidden="true">RG</div>
+    <header className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
+      <Link to="/" className="flex min-w-0 items-center gap-2.5 text-inherit no-underline">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/5 text-primary">
+          <Mark />
+        </span>
         <div>
-          <p className="topbar-title">RolloutGuard</p>
-          <p className="topbar-sub">Exception queue</p>
+          <p className="font-heading text-lg font-medium leading-none tracking-tight text-foreground">
+            RolloutGuard
+          </p>
+          <p className="mt-1 text-xs leading-none text-muted-foreground">
+            Ausnahmen statt Dauerprüfung
+          </p>
         </div>
-      </div>
-      <div className="topbar-meta">
-        {isLoading && <span>Connecting…</span>}
+      </Link>
+
+      <div className="flex flex-wrap items-center gap-3">
+        {isLoading && <span className="text-sm text-muted-foreground">Verbinde…</span>}
         {error && (
-          <span className="warn">
-            API offline. Start with <code className="mono">scripts/dev-api.ps1</code>.
+          <span className="text-sm text-[var(--warn)]">
+            API offline — <code className="font-mono text-xs">scripts/dev-api.ps1</code>
           </span>
         )}
-        {meta && !error && (
-          <>
-            <span>
-              <strong>{meta.user.display_name}</strong> · {meta.user.role}
-            </span>
-            <span>
-              LLM: {meta.llm_enabled ? meta.llm_model : 'deterministic mock'}
-            </span>
-            {analysisId != null && <span>Run #{analysisId}</span>}
-          </>
-        )}
-      </div>
-      <div className="topbar-actions">
-        <button
+        <Button
           type="button"
-          className="primary"
           disabled={!projectId || analyzePending}
           onClick={onAnalyze}
+          className="rounded-full"
         >
-          {analyzePending ? 'Analyzing…' : 'Run analysis'}
-        </button>
-        <button
+          {analyzePending ? 'Analysiere…' : 'Analyse starten'}
+        </Button>
+        <Button
           type="button"
+          variant="outline"
           disabled={!analysisId || exportPending}
           onClick={onExport}
         >
-          {exportPending ? 'Exporting…' : 'Export'}
-        </button>
+          {exportPending ? 'Exportiere…' : 'Export'}
+        </Button>
       </div>
     </header>
   )

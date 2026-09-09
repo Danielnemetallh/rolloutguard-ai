@@ -107,57 +107,57 @@ RULE_CATALOGUE: Final[list[dict[str, str]]] = [
     {
         "rule_id": "DQ-001",
         "severity": "critical",
-        "description": "Duplicate canonical key with conflicting values",
+        "description": "Doppelter kanonischer Schlüssel mit widersprüchlichen Werten",
     },
     {
         "rule_id": "DQ-002",
         "severity": "warning",
-        "description": "Site missing from a required source",
+        "description": "Standort fehlt in einer Pflichtquelle",
     },
     {
         "rule_id": "DQ-003",
         "severity": "warning",
-        "description": "Unparseable or ambiguous date",
+        "description": "Nicht lesbares oder mehrdeutiges Datum",
     },
     {
         "rule_id": "DQ-004",
         "severity": "warning",
-        "description": "Unknown status after normalization",
+        "description": "Unbekannter Status nach Normalisierung",
     },
     {
         "rule_id": "SEQ-001",
         "severity": "critical",
-        "description": "Construction actual precedes permit approval",
+        "description": "Bau-Ist vor Genehmigung",
     },
     {
         "rule_id": "SEQ-002",
         "severity": "critical",
-        "description": "Integration forecast/actual precedes fibre-ready date",
+        "description": "Integration vor Fibre-Ready-Datum",
     },
     {
         "rule_id": "SEQ-003",
         "severity": "critical",
-        "description": "Acceptance complete before required test/evidence",
+        "description": "Abnahme vor erforderlichem Integrationstest",
     },
     {
         "rule_id": "STS-001",
         "severity": "warning",
-        "description": "Completed status has no actual date",
+        "description": "Status fertig ohne Ist-Datum",
     },
     {
         "rule_id": "STS-002",
         "severity": "warning",
-        "description": "Actual date exists while status is not completed",
+        "description": "Ist-Datum vorhanden, Status nicht abgeschlossen",
     },
     {
         "rule_id": "SLA-001",
         "severity": "critical",
-        "description": "Forecast or actual exceeds contractual due date",
+        "description": "Forecast oder Ist nach vertraglicher Fälligkeit",
     },
     {
         "rule_id": "FRS-001",
         "severity": "warning",
-        "description": "Source record older than freshness threshold",
+        "description": "Quelldatensatz älter als die Aktualitätsschwelle",
     },
 ]
 
