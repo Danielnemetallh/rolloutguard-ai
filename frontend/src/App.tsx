@@ -1,69 +1,25 @@
 import { useMutation, useQuery, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
 import './App.css'
+import { AgentDock } from './components/AgentDock'
+import { Inspector } from './components/Inspector'
+import { Queue } from './components/Queue'
+import { RunStrip } from './components/RunStrip'
+import { TopBar } from './components/TopBar'
+import type {
+  AgentResult,
+  Diff,
+  ExplainResult,
+  Finding,
+  HeroFinding,
+  Meta,
+  SortKey,
+} from './types'
 
 const queryClient = new QueryClient()
-// Empty base = same-origin requests via Vite proxy (/api -> backend).
-// Override with VITE_API_BASE=http://127.0.0.1:8000 only if you bypass the proxy.
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
-
-type Meta = {
-  name: string
-  demo_mode: boolean
-  synthetic_data: boolean
-  disclaimer: string
-  user: { display_name: string; role: string }
-  llm_enabled: boolean
-  llm_model: string
-}
-
-type Finding = {
-  id: number
-  site_id: string
-  rule_id: string
-  severity: string
-  status: string
-  message: string
-  facts: Record<string, unknown>
-  evidence: Array<{
-    evidence_id: string
-    file: string
-    sheet: string
-    row: number
-    column: string
-    value: string | null
-  }>
-}
-
-type Timeline = {
-  site_id: string
-  partner_id: string | null
-  timeline: Record<string, string | null>
-  evidence: Finding['evidence']
-  findings: Finding[]
-}
-
-type AnalysisSummary = {
-  id: number
-  batch_id: number
-  status: string
-  kpis: Record<string, number>
-  created_at: string | null
-}
-
-type Diff = {
-  analysis_run_id: number
-  compared_to_run_id: number | null
-  compared_to_created_at: string | null
-  new_count: number
-  resolved_count: number
-  persisting_count: number
-  new_findings: Finding[]
-  resolved_findings: Finding[]
-}
-
-const DEFAULT_QUESTION = 'Which three sites most threaten the September integration target, and why?'
-type SortKey = 'severity' | 'site_id' | 'rule_id'
+const DEFAULT_QUESTION =
+  'Which three sites most threaten the September integration target, and why?'
 
 function Shell() {
   const qc = useQueryClient()
@@ -74,6 +30,7 @@ function Shell() {
   const [sortKey, setSortKey] = useState<SortKey>('severity')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [question, setQuestion] = useState(DEFAULT_QUESTION)
+  const [heroFindings, setHeroFindings] = useState<HeroFinding[] | undefined>()
 
   const { data: meta, isLoading, error } = useQuery({
     queryKey: ['meta'],
@@ -104,12 +61,13 @@ function Shell() {
       return res.json() as Promise<{
         analysis_run_id: number
         kpis: Record<string, number>
-        hero_findings: Array<{ rule_id: string; severity: string; message: string }>
+        hero_findings: HeroFinding[]
       }>
     },
     onSuccess: (data) => {
       setAnalysisId(data.analysis_run_id)
       setSelected(null)
+      setHeroFindings(data.hero_findings)
       void qc.invalidateQueries({ queryKey: ['findings'] })
       void qc.invalidateQueries({ queryKey: ['analyses'] })
     },
@@ -132,7 +90,7 @@ function Shell() {
   const timeline = useQuery({
     queryKey: ['timeline', selected?.site_id, analysisId],
     enabled: !!selected?.site_id && analysisId != null,
-    queryFn: async (): Promise<Timeline> => {
+    queryFn: async () => {
       const res = await fetch(
         `${API_BASE}/api/sites/${selected!.site_id}/timeline?analysis_id=${analysisId}`,
       )
@@ -170,17 +128,7 @@ function Shell() {
         method: 'POST',
       })
       if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<{
-        provider: string
-        explanation: {
-          summary: string
-          evidence_ids: string[]
-          blocker_category: string | null
-          proposed_next_action: string | null
-          confidence: number
-          abstained: boolean
-        }
-      }>
+      return res.json() as Promise<ExplainResult>
     },
   })
 
@@ -195,17 +143,7 @@ function Shell() {
         }),
       })
       if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<{
-        provider: string
-        result: {
-          answer: string
-          site_ids: string[]
-          evidence_ids: string[]
-          tool_trace: string[]
-          abstained: boolean
-          confidence: number
-        }
-      }>
+      return res.json() as Promise<AgentResult>
     },
   })
 
@@ -222,10 +160,16 @@ function Shell() {
   const analyses = useQuery({
     queryKey: ['analyses', projectId],
     enabled: !!projectId,
-    queryFn: async (): Promise<{ count: number; analyses: AnalysisSummary[] }> => {
+    queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyses`)
       if (!res.ok) throw new Error(await res.text())
-      return res.json()
+      return res.json() as Promise<{ count: number; analyses: Array<{
+        id: number
+        batch_id: number
+        status: string
+        kpis: Record<string, number>
+        created_at: string | null
+      }> }>
     },
   })
 
@@ -268,288 +212,129 @@ function Shell() {
   const reviewClosed =
     selected?.status === 'approved' || selected?.status === 'dismissed'
 
+  const showHeroHints =
+    analysisId != null && !search.trim() && !!heroFindings?.length
+
+  const matchHeroFinding = (hero: HeroFinding) =>
+    (findings.data?.findings ?? []).find(
+      (f) =>
+        f.rule_id === hero.rule_id &&
+        f.site_id === hero.site_id &&
+        f.message === hero.message,
+    ) ??
+    (findings.data?.findings ?? []).find(
+      (f) => f.rule_id === hero.rule_id && f.site_id === hero.site_id,
+    )
+
   return (
     <div className="app">
-      <div className="banner" role="status">
-        Demo mode — synthetic data only. Not affiliated with any operator.
+      <TopBar
+        meta={meta}
+        isLoading={isLoading}
+        error={error}
+        analysisId={analysisId}
+        projectId={projectId}
+        analyzePending={analyze.isPending}
+        exportPending={exportRun.isPending}
+        onAnalyze={() => projectId && analyze.mutate(projectId)}
+        onExport={() => analysisId && exportRun.mutate(analysisId)}
+      />
+      <div className="demo-strip" role="status">
+        Demo mode. Synthetic data only. Not affiliated with any operator.
       </div>
-      <header className="header">
-        <div>
-          <p className="eyebrow">RolloutGuard AI</p>
-          <h1>Evidence-linked rollout controls</h1>
-          <p className="lede">
-            Reconcile contract, schedule, and site-status workbooks into a
-            traceable exception queue.
-          </p>
-          <div className="actions">
-            <button
-              type="button"
-              className="primary"
-              disabled={!projectId || analyze.isPending}
-              onClick={() => projectId && analyze.mutate(projectId)}
-            >
-              {analyze.isPending ? 'Analyzing…' : 'Run synthetic analysis'}
-            </button>
-            <button
-              type="button"
-              disabled={!analysisId || exportRun.isPending}
-              onClick={() => analysisId && exportRun.mutate(analysisId)}
-            >
-              {exportRun.isPending ? 'Exporting…' : 'Export (.xlsx + .md)'}
-            </button>
-            {analyze.isError && <span className="warn">Analysis failed — is the API running?</span>}
-            {exportRun.isError && <span className="warn">Export failed.</span>}
-            {exportRun.isSuccess && <span className="muted">Export written to data/uploads/exports/.</span>}
-          </div>
-        </div>
-        <div className="meta-card">
-          {isLoading && <p>Connecting to API…</p>}
-          {error && (
-            <p className="warn">
-              API offline. Start with <code>scripts/dev-api.ps1</code>.
-            </p>
+      {(analyze.isError || exportRun.isError || exportRun.isSuccess) && (
+        <div className="demo-strip">
+          {analyze.isError && (
+            <span className="warn">Analysis failed. Is the API running?</span>
           )}
-          {meta && (
-            <>
-              <p>
-                <strong>{meta.user.display_name}</strong> · {meta.user.role}
-              </p>
-              <p>LLM: {meta.llm_enabled ? meta.llm_model : 'deterministic mock'}</p>
-              {analysisId && <p>Analysis run #{analysisId}</p>}
-            </>
+          {exportRun.isError && <span className="warn"> Export failed.</span>}
+          {exportRun.isSuccess && (
+            <span className="muted"> Export written to data/uploads/exports/.</span>
           )}
         </div>
-      </header>
-
-      {kpis && (
-        <section className="kpi-row">
-          <div><span>Sites</span><strong>{kpis.sites_total}</strong></div>
-          <div><span>Findings</span><strong>{kpis.findings_total}</strong></div>
-          <div><span>Critical</span><strong>{kpis.findings_critical}</strong></div>
-          <div><span>SLA risk</span><strong>{kpis.sites_with_sla_risk}</strong></div>
-        </section>
       )}
-
-      {diff.data && diff.data.compared_to_run_id != null && (
-        <section className="diff-row muted">
-          Since run #{diff.data.compared_to_run_id}:{' '}
-          <strong className="warn">{diff.data.new_count} new</strong> ·{' '}
-          <strong>{diff.data.resolved_count} resolved</strong> ·{' '}
-          {diff.data.persisting_count} unchanged
-        </section>
-      )}
-
-      {analyses.data && analyses.data.analyses.length > 1 && (
-        <section className="history-panel">
-          <h2>Run history</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Run</th>
-                <th>When</th>
-                <th>Findings</th>
-                <th>Critical</th>
-              </tr>
-            </thead>
-            <tbody>
-              {analyses.data.analyses.map((a) => (
-                <tr
-                  key={a.id}
-                  className={analysisId === a.id ? 'selected' : ''}
-                  onClick={() => setAnalysisId(a.id)}
-                >
-                  <td>#{a.id}</td>
-                  <td>{a.created_at ? new Date(a.created_at).toLocaleString() : '—'}</td>
-                  <td>{a.kpis?.findings_total ?? '—'}</td>
-                  <td>{a.kpis?.findings_critical ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
-
-      <div className="workspace">
-        <section className="findings-panel">
-          <div className="panel-head">
-            <h2>Findings {findings.data && `(${visibleFindings.length}/${findings.data.count})`}</h2>
-            <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-              <option value="">All severities</option>
-              <option value="critical">Critical</option>
-              <option value="warning">Warning</option>
-            </select>
-          </div>
-          {analysisId && (
-            <input
-              type="search"
-              className="search-box"
-              placeholder="Search site, rule, or message…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          )}
-          {!analysisId && <p className="muted">Run analysis to populate the exception queue.</p>}
-          {findings.data && (
-            <table>
-              <thead>
-                <tr>
-                  <th onClick={() => toggleSort('severity')}>
-                    Severity {sortKey === 'severity' && (sortDir === 'asc' ? '▲' : '▼')}
-                  </th>
-                  <th onClick={() => toggleSort('site_id')}>
-                    Site {sortKey === 'site_id' && (sortDir === 'asc' ? '▲' : '▼')}
-                  </th>
-                  <th onClick={() => toggleSort('rule_id')}>
-                    Rule {sortKey === 'rule_id' && (sortDir === 'asc' ? '▲' : '▼')}
-                  </th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleFindings.map((f) => (
-                  <tr
-                    key={f.id}
-                    className={selected?.id === f.id ? 'selected' : ''}
-                    onClick={() => setSelected(f)}
-                  >
-                    <td><span className={`sev ${f.severity}`}>{f.severity}</span></td>
-                    <td>{f.site_id}</td>
-                    <td>{f.rule_id}</td>
-                    <td>{f.message}</td>
-                  </tr>
-                ))}
-                {visibleFindings.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="muted">No findings match "{search}".</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-        </section>
-
-        <aside className="evidence-panel">
-          <h2>Evidence</h2>
-          {!selected && <p className="muted">Select a finding to inspect lineage.</p>}
-          {selected && (
-            <>
-              <p className="eyebrow">{selected.rule_id} · {selected.site_id}</p>
-              <p>
-                <span className={`review-status ${selected.status}`}>{selected.status}</span>
-              </p>
-              <p>{selected.message}</p>
-              <h3>Source cells</h3>
-              <ul>
-                {selected.evidence.map((e) => (
-                  <li key={e.evidence_id}>
-                    <code>{e.evidence_id}</code> {e.file} / {e.sheet} r{e.row} · {e.column}
-                    {e.value != null && <> = <em>{e.value}</em></>}
-                  </li>
-                ))}
-              </ul>
-              {timeline.data && (
-                <>
-                  <h3>Site timeline</h3>
-                  <dl className="timeline">
-                    {Object.entries(timeline.data.timeline).map(([k, v]) => (
-                      <div key={k}>
-                        <dt>{k}</dt>
-                        <dd>{v ?? '—'}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </>
-              )}
-              <div className="actions">
-                <button
-                  type="button"
-                  onClick={() => explain.mutate(selected.id)}
-                  disabled={explain.isPending}
-                >
-                  {explain.isPending ? 'Explaining…' : 'AI explain'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    review.mutate({
-                      id: selected.id,
-                      decision: 'approve',
-                      reason: 'Confirmed with partner manager',
-                    })
-                  }
-                  disabled={review.isPending || reviewClosed}
-                >
-                  {review.isPending ? 'Saving…' : 'Approve'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    review.mutate({
-                      id: selected.id,
-                      decision: 'dismiss',
-                      reason: 'False positive / already handled',
-                    })
-                  }
-                  disabled={review.isPending || reviewClosed}
-                >
-                  Dismiss
-                </button>
-              </div>
-              {review.isError && (
-                <p className="warn">Could not save review — is the API running?</p>
-              )}
-              {review.isSuccess && reviewClosed && (
-                <p className="muted">Review saved ({selected.status}).</p>
-              )}
-              {explain.data && (
-                <div className="ai-box">
-                  <h3>AI explanation</h3>
-                  <p>{explain.data.explanation.summary}</p>
-                  {explain.data.explanation.proposed_next_action && (
-                    <p>
-                      <strong>Next:</strong> {explain.data.explanation.proposed_next_action}
-                    </p>
-                  )}
-                  <p className="muted">
-                    category={explain.data.explanation.blocker_category ?? '—'} ·
-                    confidence={explain.data.explanation.confidence} ·
-                    abstained={String(explain.data.explanation.abstained)}
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-        </aside>
-      </div>
-
-      <section className="agent-panel">
-        <h2>Ask the agent</h2>
-        <p className="muted">
-          Read-only — the agent can query KPIs, findings, and site timelines, but never changes them.
-        </p>
-        <form
-          className="agent-form"
-          onSubmit={(e) => {
-            e.preventDefault()
+      <main className="workbench">
+        <RunStrip
+          kpis={kpis}
+          diff={diff.data}
+          analyses={analyses.data?.analyses}
+          analysisId={analysisId}
+          onSelectRun={(id) => {
+            setAnalysisId(id)
+            setSelected(null)
+            explain.reset()
+          }}
+        />
+        <div className="workspace">
+          <Queue
+            analysisId={analysisId}
+            findings={visibleFindings}
+            totalCount={findings.data?.count}
+            visibleCount={visibleFindings.length}
+            search={search}
+            severity={severity}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            selectedId={selected?.id ?? null}
+            heroFindings={heroFindings}
+            showHeroHints={showHeroHints}
+            onSearchChange={setSearch}
+            onSeverityChange={setSeverity}
+            onToggleSort={toggleSort}
+            onSelect={(f) => {
+              setSelected(f)
+              explain.reset()
+            }}
+            onHeroSelect={(hero) => {
+              const match = matchHeroFinding(hero)
+              if (match) {
+                setSelected(match)
+                explain.reset()
+              }
+            }}
+          />
+          <Inspector
+            selected={selected}
+            timeline={timeline.data}
+            explainPending={explain.isPending}
+            reviewPending={review.isPending}
+            reviewClosed={reviewClosed}
+            reviewError={review.isError}
+            reviewSuccess={review.isSuccess}
+            explainResult={explain.data}
+            onExplain={() => selected && explain.mutate(selected.id)}
+            onApprove={() =>
+              selected &&
+              review.mutate({
+                id: selected.id,
+                decision: 'approve',
+                reason: 'Confirmed with partner manager',
+              })
+            }
+            onDismiss={() =>
+              selected &&
+              review.mutate({
+                id: selected.id,
+                decision: 'dismiss',
+                reason: 'False positive / already handled',
+              })
+            }
+          />
+        </div>
+        <AgentDock
+          analysisId={analysisId}
+          question={question}
+          pending={askAgent.isPending}
+          error={askAgent.isError}
+          result={askAgent.data}
+          onQuestionChange={setQuestion}
+          onSubmit={() => {
             if (analysisId && question.trim()) {
               askAgent.mutate({ analysisRunId: analysisId, question: question.trim() })
             }
           }}
-        >
-          <input
-            type="text"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask a question about this analysis run…"
-            disabled={!analysisId}
-          />
-          <button type="submit" disabled={!analysisId || askAgent.isPending || !question.trim()}>
-            {askAgent.isPending ? 'Asking…' : 'Ask'}
-          </button>
-        </form>
-        {askAgent.isError && <p className="warn">Agent query failed.</p>}
-        {askAgent.data && <pre>{askAgent.data.result.answer}</pre>}
-      </section>
+        />
+      </main>
     </div>
   )
 }
