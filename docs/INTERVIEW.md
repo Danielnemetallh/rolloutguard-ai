@@ -72,11 +72,11 @@ Vollständige Liste: `backend/src/rolloutguard_api/domain/schema.py`
 
 → http://localhost:5173
 
-1. **Run synthetic analysis**
-2. Filter **Critical** → **DE-NRW-0107**
-3. Evidence Drawer → **AI explain**
-4. **Ask agent** (Freitext)
-5. **Approve / Dismiss** → **Export**
+1. **Analyse starten** → KPI-Kacheln (u. a. SLA-Risiko)
+2. Chip **Kritisch** → **DE-NRW-0107** (Befund-Seite)
+3. Inspektor → **KI erklären** (Evidenz-Chips)
+4. **Agent-Kugel** unten rechts (Chip oder Freitext)
+5. **Freigeben / Verwerfen** → **Export**
 
 Details: [DEMO.md](./DEMO.md)
 

@@ -1,17 +1,17 @@
 # 10-minute demo script (synthetic data)
 
-1. Banner: "Independent prototype — fictional partners/sites/rules."
+1. Sticky header: **Analyse starten** / **Export**. KI-Kugel unten rechts.
 2. Architecture one-liner: deterministic rules own severity; AI explains with citations.
-3. Click **Run synthetic analysis** → show KPI cards (note **SLA risk**).
-4. Filter Critical → open **DE-NRW-0107**:
-   - contract due 2026-09-15
-   - forecast 2026-09-20 → SLA-001
-   - planned integration before fibre-ready → SEQ-002
-5. Evidence drawer: file / sheet / row / column.
-6. **AI explain** → grounded summary + next action (does not change severity).
-7. **Ask agent** (free-text) → e.g. "Which sites threaten September integration?"
-8. **Approve / Dismiss** with reason; click **Export (.xlsx + .md)**.
-9. Optional: set `LLM_ENABLED=false`, re-run explain → mock still works.
-10. Close with value hypothesis + "which real workbook pain should we validate first?"
+3. Click **Analyse starten** → KPI-Kacheln (**Standorte**, **Befunde**, **Kritisch**, **SLA-Risiko**).
+4. Chip **Kritisch** → click **DE-NRW-0107** (opens `/befund/:id`):
+   - Vertragsfälligkeit 2026-09-15
+   - Forecast 2026-09-20 → SLA-001
+   - Integration vor Fibre-Ready → SEQ-002
+5. Inspektor **Quellzellen**: Datei / Blatt / Zeile / Spalte.
+6. **KI erklären** → Zusammenfassung + nächster Schritt + Evidenz-Chips.
+7. **Agent-Kugel** unten rechts — Chip oder Freitext.
+8. **Freigeben / Verwerfen** (zweiter Klick bestätigt); **Export**.
+9. Optional: `LLM_ENABLED=false`, Erklärung erneut — Mock bleibt.
+10. Abschluss: Wert-Hypothese + „Welchen echten Workbook-Schmerz sollten wir zuerst validieren?“
 
 Reset before demo: `.\scripts\demo-reset.ps1`
