@@ -45,6 +45,45 @@ export function FindingPage() {
       onApprove={() => selected && wb.approveFinding(selected.id)}
       onDismiss={() => selected && wb.dismissFinding(selected.id)}
       onEvidenceHighlight={wb.highlightEvidence}
+      onDraftAction={(kind) => {
+        if (!selected) return
+        const due = String(selected.facts.contractual_due_date ?? '2026-09-15')
+        const payloads: Record<typeof kind, Record<string, unknown>> = {
+          calendar: {
+            site_id: selected.site_id,
+            title: `SLA-Risiko ${selected.site_id}`,
+            date: due,
+            milestone_kind: 'due',
+            description: selected.message,
+          },
+          email: {
+            to: 'partner@nordturm.demo',
+            subject: `${selected.rule_id} ${selected.site_id}`,
+            body: selected.message,
+            site_id: selected.site_id,
+          },
+          board: {
+            title: `${selected.rule_id} ${selected.site_id}`,
+            body: selected.message,
+            site_id: selected.site_id,
+          },
+          override: {
+            site_id: selected.site_id,
+            field: 'forecast_date',
+            new_value: due,
+            reason: 'Analyst Override aus Inspektor',
+          },
+          watch: {
+            site_id: selected.site_id,
+            rule_id: selected.rule_id,
+          },
+        }
+        wb.onDraftAction({
+          action_type: kind,
+          payload: payloads[kind],
+          site_id: selected.site_id,
+        })
+      }}
     />
   )
 }

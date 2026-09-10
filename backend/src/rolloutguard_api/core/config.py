@@ -26,16 +26,18 @@ class Settings(BaseSettings):
     )
 
     app_env: str = "development"
-    # Prefer Neon Postgres in .env. SQLite is a local/dev fallback when Neon is unset.
     database_url: str = "sqlite:///./rolloutguard.db"
     demo_user_name: str = "Demo-Analystin"
     demo_user_role: str = "Analystin"
-    opencode_api_key: str = ""
-    opencode_base_url: str = "https://opencode.ai/zen/v1"
-    opencode_model: str = "deepseek-v4-flash-free"
-    # low | medium | high | or empty to omit
-    opencode_reasoning_effort: str = "medium"
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-v4-flash"
+    # low | high | max | disabled (thinking off)
+    deepseek_reasoning_effort: str = "low"
     llm_enabled: bool = False
+    composio_api_key: str = ""
+    composio_user_id: str = "demo-analystin"
+    composio_notion_database_id: str = ""
     upload_dir: Path = Path("../data/uploads")
     synthetic_dir: Path = Path("../data/synthetic")
     cors_origins: str = "http://localhost:5173"

@@ -21,6 +21,18 @@ export const TIMELINE_LABELS: Record<string, string> = {
   acceptance_status: 'Abnahme',
   partner_status: 'Partnerstatus',
   last_updated_at: 'Zuletzt aktualisiert',
+  missing_sources: 'Fehlende Quellen',
+  present: 'Vorhanden',
+  delta_days: 'Tage Abweichung',
+  age_days: 'Alter in Tagen',
+  threshold_days: 'Schwelle in Tagen',
+  raw_status: 'Rohstatus',
+  bad_cells: 'Ungültige Zellen',
+  forecasts: 'Forecasts',
+  contract: 'Vertrag',
+  schedule: 'Terminplan',
+  required_evidence: 'Erforderliche Evidenz',
+  blocker_comment: 'Blocker-Kommentar',
 }
 
 export function severityLabel(severity: string) {

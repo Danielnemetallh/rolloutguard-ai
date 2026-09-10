@@ -32,5 +32,7 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     # Import models so metadata is populated
     import rolloutguard_api.db.models  # noqa: F401
+    from rolloutguard_api.ai.memory import init_corpus_fts
 
     Base.metadata.create_all(bind=engine)
+    init_corpus_fts(engine)

@@ -6,6 +6,7 @@ export type Meta = {
   user: { display_name: string; role: string }
   llm_enabled: boolean
   llm_model: string
+  llm_provider?: string
 }
 
 export type Finding = {
@@ -80,8 +81,40 @@ export type AgentResult = {
     answer: string
     site_ids: string[]
     evidence_ids: string[]
+    memory_ids?: string[]
+    proposed_action_ids?: number[]
     tool_trace: string[]
     abstained: boolean
     confidence: number
   }
 }
+
+export type ProposedAction = {
+  id: number
+  action_type: string
+  status: string
+  payload: Record<string, unknown>
+  site_ids: string[]
+  evidence_ids: string[]
+  result: Record<string, unknown>
+  created_at: string | null
+}
+
+export type IntegrationStatus = {
+  composio_configured: boolean
+  composio_sdk_installed?: boolean
+  connected?: boolean
+  session_ready?: boolean
+  oauth_needed?: boolean
+  mode: string
+  calendar: string
+  connect_hint: string
+}
+
+export type UploadedDocument = {
+  id: number
+  filename: string
+  kind: string
+  site_ids: string[]
+}
+

@@ -37,6 +37,11 @@ _DATE_LABELS = {
     "forecast_date": "Forecast",
     "actual_date": "Ist",
 }
+_SOURCE_LABELS = {
+    "contract": "Vertrag",
+    "schedule": "Terminplan",
+    "status": "Status",
+}
 
 
 def _date_label(field: str) -> str:
@@ -91,7 +96,8 @@ def rule_dq_002(site: CanonicalSite, _as_of: date) -> list[Finding]:
         _finding(
             "DQ-002",
             site,
-            f"Standort fehlt in erforderlicher(n) Quelle(n): {', '.join(missing)}.",
+            "Standort fehlt in erforderlicher(n) Quelle(n): "
+            f"{', '.join(_SOURCE_LABELS.get(m, m) for m in missing)}.",
             {"missing_sources": missing, "present": sorted(site.sources_present)},
             severity=severity,
         )

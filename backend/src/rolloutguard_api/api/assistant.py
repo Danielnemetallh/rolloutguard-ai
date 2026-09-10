@@ -25,7 +25,7 @@ class ExplainRequest(BaseModel):
 
 class AssistantQuery(BaseModel):
     analysis_run_id: int
-    question: str = Field(min_length=3, max_length=2000)
+    question: str = Field(max_length=2000)
     force_mock: bool = False
 
 
@@ -37,7 +37,7 @@ class BlockerRequest(BaseModel):
 def explain(finding_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     finding = db.get(models.FindingRow, finding_id)
     if not finding:
-        raise AppError("FINDING_NOT_FOUND", "Finding not found", status_code=404)
+        raise AppError("FINDING_NOT_FOUND", "Befund nicht gefunden", status_code=404)
     provider = get_llm_provider()
     result = explain_finding(
         rule_id=finding.rule_id,
@@ -84,14 +84,14 @@ def assistant_status() -> dict[str, Any]:
     settings = get_settings()
     provider = get_llm_provider()
     model = (
-            settings.opencode_model
-            if provider.name != "deterministic-mock"
-            else provider.name
-        )
+        settings.deepseek_model
+        if provider.name != "deterministic-mock"
+        else provider.name
+    )
     return {
         "llm_enabled": settings.llm_enabled,
         "provider": provider.name,
         "model": model,
-        "base_url": settings.opencode_base_url,
-        "has_api_key": bool(settings.opencode_api_key),
+        "base_url": settings.deepseek_base_url,
+        "has_api_key": bool(settings.deepseek_api_key),
     }

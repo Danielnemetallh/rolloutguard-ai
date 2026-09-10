@@ -9,6 +9,8 @@ import { statusLabel, timelineLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import type { ExplainResult, Finding, Timeline } from '../types'
 
+type DraftKind = 'calendar' | 'email' | 'board' | 'override' | 'watch'
+
 type InspectorProps = {
   selected: Finding | null
   loading?: boolean
@@ -25,10 +27,25 @@ type InspectorProps = {
   onApprove: () => void
   onDismiss: () => void
   onEvidenceHighlight: (id: string) => void
+  onDraftAction?: (kind: DraftKind) => void
 }
 
 function formatTimelineValue(value: string | null) {
   return value ?? 'k. A.'
+}
+
+function formatFact(key: string, value: unknown) {
+  if (value == null || value === '') return 'k. A.'
+  if (Array.isArray(value)) {
+    const mapped = value.map((item) =>
+      typeof item === 'string' && (key === 'missing_sources' || key === 'present')
+        ? timelineLabel(item)
+        : String(item),
+    )
+    return mapped.join(', ')
+  }
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
 }
 
 export function Inspector({
@@ -47,6 +64,7 @@ export function Inspector({
   onApprove,
   onDismiss,
   onEvidenceHighlight,
+  onDraftAction,
 }: InspectorProps) {
   const [armedAction, setArmedAction] = useState<'approve' | 'dismiss' | null>(null)
 
@@ -139,6 +157,26 @@ export function Inspector({
                 </Button>
               </div>
 
+              {onDraftAction && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('calendar')}>
+                    Kalender
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('email')}>
+                    Mail
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('board')}>
+                    Karte
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('override')}>
+                    Override
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('watch')}>
+                    Watch
+                  </Button>
+                </div>
+              )}
+
               {reviewError && (
                 <p className="text-sm text-[var(--warn)]">
                   Prüfung konnte nicht gespeichert werden — läuft die API?
@@ -176,6 +214,26 @@ export function Inspector({
                 </Card>
               )}
             </div>
+
+            {Object.keys(selected.facts).length > 0 && (
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Fakten
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="divide-y divide-border text-sm">
+                    {Object.entries(selected.facts).map(([k, v]) => (
+                      <div key={k} className="grid grid-cols-2 gap-2 py-2">
+                        <dt className="text-muted-foreground">{timelineLabel(k)}</dt>
+                        <dd className="font-mono text-xs">{formatFact(k, v)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader className="py-3">

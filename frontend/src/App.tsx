@@ -22,8 +22,13 @@ function Shell() {
           projectId={wb.projectId}
           analyzePending={wb.analyzePending}
           exportPending={wb.exportPending}
+          uploadPending={wb.uploadPending}
+          documentsCount={wb.documents.length}
+          integrations={wb.integrations}
           onAnalyze={wb.onAnalyze}
           onExport={wb.onExport}
+          onUploadDocument={wb.onUploadDocument}
+          onConnect={wb.onConnect}
         />
       }
     >
@@ -37,6 +42,7 @@ function Shell() {
         pending={wb.askPending}
         error={wb.askError}
         result={wb.askResult}
+        history={wb.history}
         onQuestionChange={wb.questionChange}
         onSubmit={wb.submitQuestion}
         onEvidenceSelect={wb.highlightEvidence}
