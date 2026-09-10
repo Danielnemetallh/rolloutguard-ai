@@ -2,16 +2,37 @@ import type { ReactNode } from 'react'
 
 type LayoutProps = {
   header: ReactNode
+  navigation: ReactNode
+  agent: ReactNode
+  navigationCollapsed: boolean
+  agentCollapsed: boolean
   children: ReactNode
 }
 
-export function Layout({ header, children }: LayoutProps) {
+export function Layout({
+  header,
+  navigation,
+  agent,
+  navigationCollapsed,
+  agentCollapsed,
+  children,
+}: LayoutProps) {
   return (
-    <div className="min-h-dvh bg-background">
-      <div className="sticky top-0 z-40 border-b border-border bg-card/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85">
-        {header}
+    <div
+      className={`workbench-shell ${navigationCollapsed ? 'navigation-collapsed' : ''} ${agentCollapsed ? 'agent-collapsed' : ''}`}
+    >
+      <aside id="primary-navigation" className="workbench-navigation" aria-label="Anwendungsnavigation">
+        {navigation}
+      </aside>
+      <div className="min-w-0 bg-background">
+        <div className="sticky top-0 z-30 border-b border-border bg-[var(--surface-raised)]">
+          {header}
+        </div>
+        <main className="min-w-0 px-5 py-5 xl:px-7">{children}</main>
       </div>
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+      <aside id="evidence-agent" className="workbench-agent" aria-label="Evidenz-Copilot">
+        {agent}
+      </aside>
     </div>
   )
 }

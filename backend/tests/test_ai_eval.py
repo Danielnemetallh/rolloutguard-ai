@@ -166,7 +166,15 @@ def test_agent_forces_trusted_analysis_run_id() -> None:
     class WrongRunProvider(LLMProvider):
         name = "wrong-run-mock"
 
-        def complete(self, messages, *, tools=None, temperature=0.0, max_tokens=1200, thinking=False):
+        def complete(
+            self,
+            messages,
+            *,
+            tools=None,
+            temperature=0.0,
+            max_tokens=1200,
+            thinking=False,
+        ):
             return LLMResponse(
                 content="",
                 model=self.name,

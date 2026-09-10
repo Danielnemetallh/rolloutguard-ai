@@ -1,6 +1,5 @@
 import { useRef } from 'react'
-import { Link } from 'react-router-dom'
-import { Mark } from '@/components/Mark'
+import { Activity, FileUp, Play, Share } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { IntegrationStatus } from '../types'
 
@@ -52,26 +51,17 @@ export function TopBar({
         : 'Datei-Fallback'
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
-      <Link to="/" className="flex min-w-0 items-center gap-2.5 text-inherit no-underline">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/5 text-primary">
-          <Mark />
-        </span>
-        <div>
-          <p className="font-heading text-lg font-medium leading-none tracking-tight text-foreground">
-            RolloutGuard
-          </p>
-          <p className="mt-1 text-xs leading-none text-muted-foreground">
-            Ausnahmen statt Dauerprüfung
-          </p>
-        </div>
-      </Link>
+    <header className="flex min-h-16 flex-wrap items-center justify-between gap-4 px-5 xl:px-7">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Activity className="size-4 text-[var(--success)]" />
+        <span>{analysisId ? `Lauf #${analysisId} aktiv` : 'Bereit für die erste Analyse'}</span>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         {isLoading && <span className="text-sm text-muted-foreground">Verbinde…</span>}
         {error && (
           <span className="text-sm text-[var(--warn)]">
-            API offline — <code className="font-mono text-xs">scripts/dev-api.ps1</code>
+            API offline. <code className="font-mono text-xs">scripts/dev-api.ps1</code>
           </span>
         )}
         <span className="hidden text-xs text-muted-foreground sm:inline" title={integrations?.connect_hint}>
@@ -95,7 +85,7 @@ export function TopBar({
           disabled={!projectId || uploadPending}
           onClick={() => fileRef.current?.click()}
         >
-          {uploadPending ? 'Lade…' : 'Dokumente'}
+          <FileUp className="size-4" /> {uploadPending ? 'Lade…' : 'Dokument'}
         </Button>
         {showConnect && (
           <Button type="button" variant="outline" onClick={onConnect}>
@@ -106,9 +96,8 @@ export function TopBar({
           type="button"
           disabled={!projectId || analyzePending}
           onClick={onAnalyze}
-          className="rounded-full"
         >
-          {analyzePending ? 'Analysiere…' : 'Analyse starten'}
+          <Play className="size-4" /> {analyzePending ? 'Analysiere…' : 'Analyse starten'}
         </Button>
         <Button
           type="button"
@@ -116,7 +105,7 @@ export function TopBar({
           disabled={!analysisId || exportPending}
           onClick={onExport}
         >
-          {exportPending ? 'Exportiere…' : 'Export'}
+          <Share className="size-4" /> {exportPending ? 'Exportiere…' : 'Export'}
         </Button>
       </div>
     </header>

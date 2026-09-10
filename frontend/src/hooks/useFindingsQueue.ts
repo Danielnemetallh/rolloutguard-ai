@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { API_BASE } from '@/lib/api'
 import type { Finding, HeroFinding, SortKey } from '../types'
 
@@ -64,34 +64,21 @@ export function useFindingsQueue(
         f.message === hero.message,
     ) ?? mappedFindings.find((f) => f.rule_id === hero.rule_id && f.site_id === hero.site_id)
 
-  const queueState = useMemo(
-    () => ({
-      findings: mappedFindings,
-      totalCount: findings.data?.count,
-      visibleFindings,
-      findingsLoading,
-      search,
-      severity,
-      sortKey,
-      sortDir,
-      showHeroHints,
-      matchHeroFinding,
-      onSearchChange: setSearch,
-      onSeverityChange: setSeverity,
-      onToggleSort: toggleSort,
-    }),
-    [
-      mappedFindings,
-      findings.data?.count,
-      visibleFindings,
-      findingsLoading,
-      search,
-      severity,
-      sortKey,
-      sortDir,
-      showHeroHints,
-    ],
-  )
-
-  return queueState
+  return {
+    findings: mappedFindings,
+    totalCount: findings.data?.count,
+    visibleFindings,
+    findingsLoading,
+    findingsError: findings.isError,
+    search,
+    severity,
+    sortKey,
+    sortDir,
+    showHeroHints,
+    matchHeroFinding,
+    onSearchChange: setSearch,
+    onSeverityChange: setSeverity,
+    onToggleSort: toggleSort,
+    retryFindings: () => void findings.refetch(),
+  }
 }

@@ -2,39 +2,69 @@
 @import 'tw-animate-css';
 @import '@fontsource-variable/geist';
 @import '@fontsource-variable/geist-mono';
-@import '@fontsource-variable/jost';
 
 @theme {
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
-  --font-heading: 'Jost Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
-  --background: #f3efe6;
-  --foreground: #1c1a16;
-  --card: #fffdf8;
-  --card-foreground: #1c1a16;
-  --primary: #0f5c4c;
-  --primary-foreground: #f7f3ea;
-  --secondary: #eee9df;
-  --secondary-foreground: #1c1a16;
-  --muted: #eee9df;
-  --muted-foreground: #5c564c;
-  --accent: #e8f2ee;
-  --accent-foreground: #0f5c4c;
-  --destructive: #8a1f1f;
-  --destructive-foreground: #f7f3ea;
-  --border: #d9d2c4;
-  --input: #d9d2c4;
-  --ring: #0f5c4c;
+  --background: #f2f0ea;
+  --background: oklch(95.5% 0.009 85);
+  --surface-raised: #faf8f2;
+  --surface-raised: oklch(98% 0.008 85);
+  --foreground: #25272a;
+  --foreground: oklch(27% 0.012 255);
+  --card: #faf8f2;
+  --card: oklch(98% 0.008 85);
+  --card-foreground: #25272a;
+  --card-foreground: oklch(27% 0.012 255);
+  --primary: #172b45;
+  --primary: oklch(29% 0.055 252);
+  --primary-foreground: #f8f7f2;
+  --primary-foreground: oklch(97.5% 0.006 85);
+  --secondary: #e9e6dd;
+  --secondary: oklch(92.5% 0.01 85);
+  --secondary-foreground: #25272a;
+  --secondary-foreground: oklch(27% 0.012 255);
+  --muted: #e9e6dd;
+  --muted: oklch(92.5% 0.01 85);
+  --muted-foreground: #686765;
+  --muted-foreground: oklch(50% 0.012 75);
+  --accent: #e7ebef;
+  --accent: oklch(93% 0.014 250);
+  --accent-foreground: #172b45;
+  --accent-foreground: oklch(29% 0.055 252);
+  --selection: #e2e8ef;
+  --selection: oklch(91.5% 0.02 250);
+  --message-user: #e8edf2;
+  --message-user: oklch(93.5% 0.016 250);
+  --destructive: #a52828;
+  --destructive: oklch(47% 0.16 27);
+  --destructive-foreground: #f8f7f2;
+  --destructive-foreground: oklch(97.5% 0.006 85);
+  --border: #d6d2c8;
+  --border: oklch(86% 0.012 80);
+  --input: #cac6bc;
+  --input: oklch(82% 0.013 80);
+  --ring: #172b45;
+  --ring: oklch(38% 0.06 252);
   --radius: 0.5rem;
-  --critical: #8a1f1f;
-  --critical-bg: #f8eaea;
-  --warn: #8a5a12;
-  --warn-bg: #f8f0e2;
-  --approved: #0f5c4c;
-  --approved-bg: #eef7f3;
+  --critical: #a52828;
+  --critical: oklch(47% 0.16 27);
+  --critical-bg: #f7e9e5;
+  --critical-bg: oklch(94% 0.025 28);
+  --warning: #8a6116;
+  --warning: oklch(51% 0.105 76);
+  --warn: var(--warning);
+  --warn-bg: #f6eedc;
+  --warn-bg: oklch(94% 0.035 82);
+  --success: #3e755c;
+  --success: oklch(50% 0.075 155);
+  --approved: var(--success);
+  --approved-bg: #e7f1e9;
+  --approved-bg: oklch(94% 0.028 150);
 }
 
 @theme inline {
@@ -70,6 +100,7 @@
   }
   body {
     @apply bg-background text-foreground m-0 min-h-dvh;
+    line-height: 1.6;
   }
   #root {
     @apply min-h-dvh;
@@ -79,6 +110,76 @@
   select,
   textarea {
     font: inherit;
+  }
+}
+
+.workbench-shell {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr) 400px;
+  min-height: 100dvh;
+}
+
+.workbench-shell.navigation-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr) 400px;
+}
+
+.workbench-shell.agent-collapsed {
+  grid-template-columns: 224px minmax(0, 1fr) 56px;
+}
+
+.workbench-shell.navigation-collapsed.agent-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr) 56px;
+}
+
+.workbench-navigation,
+.workbench-agent {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: 100dvh;
+  min-width: 0;
+}
+
+.nav-label {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.navigation-collapsed .nav-label {
+  pointer-events: none;
+  position: absolute;
+  opacity: 0;
+  transform: translateX(-4px);
+}
+
+@media (max-width: 1279px) {
+  .workbench-shell,
+  .workbench-shell.navigation-collapsed,
+  .workbench-shell.agent-collapsed,
+  .workbench-shell.navigation-collapsed.agent-collapsed {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .workbench-navigation .nav-label {
+    pointer-events: none;
+    position: absolute;
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+
+  .workbench-agent {
+    position: fixed;
+    right: 0;
+    width: 400px;
+    max-width: calc(100vw - 72px);
+    box-shadow: -12px 0 30px oklch(20% 0.02 250 / 12%);
+  }
+
+  .agent-collapsed .workbench-agent {
+    width: 56px;
+    box-shadow: none;
   }
 }
 

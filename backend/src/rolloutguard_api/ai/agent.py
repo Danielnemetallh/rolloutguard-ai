@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from rolloutguard_api.ai.citations import AgentCitation, resolve_agent_citations
 from rolloutguard_api.ai.memory import persist_agent_turn, recall_session
 from rolloutguard_api.ai.provider import LLMProvider, extract_json_object, get_llm_provider
 from rolloutguard_api.ai.tools import TOOL_IMPL, TOOL_SPECS
@@ -40,10 +41,38 @@ class AgentAnswer(BaseModel):
     site_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     memory_ids: list[str] = Field(default_factory=list)
+    citations: list[AgentCitation] = Field(default_factory=list)
     proposed_action_ids: list[int] = Field(default_factory=list)
     tool_trace: list[str] = Field(default_factory=list)
     abstained: bool = False
     confidence: float = 0.0
+
+
+def _persist_answer(
+    db: Session, *, analysis_run_id: int, answer: AgentAnswer
+) -> AgentAnswer:
+    answer.citations = resolve_agent_citations(
+        db,
+        analysis_run_id=analysis_run_id,
+        evidence_ids=answer.evidence_ids,
+        memory_ids=answer.memory_ids,
+    )
+    persist_agent_turn(
+        db,
+        analysis_run_id=analysis_run_id,
+        role="assistant",
+        content=answer.answer,
+        tool_trace=answer.tool_trace,
+        citations={
+            "evidence_ids": answer.evidence_ids,
+            "memory_ids": answer.memory_ids,
+            "proposed_action_ids": answer.proposed_action_ids,
+            "citations": [
+                citation.model_dump(by_alias=True) for citation in answer.citations
+            ],
+        },
+    )
+    return answer
 
 
 def run_agent(
@@ -127,6 +156,7 @@ def run_agent(
         content = response.content or ""
         try:
             data = extract_json_object(content)
+            data.pop("citations", None)
             answer = AgentAnswer.model_validate(data)
             if not answer.tool_trace:
                 answer.tool_trace = trace
@@ -134,19 +164,7 @@ def run_agent(
                 answer.proposed_action_ids = proposed_ids
             if memory_ids and not answer.memory_ids:
                 answer.memory_ids = memory_ids
-            persist_agent_turn(
-                db,
-                analysis_run_id=analysis_run_id,
-                role="assistant",
-                content=answer.answer,
-                tool_trace=answer.tool_trace,
-                citations={
-                    "evidence_ids": answer.evidence_ids,
-                    "memory_ids": answer.memory_ids,
-                    "proposed_action_ids": answer.proposed_action_ids,
-                },
-            )
-            return answer
+            return _persist_answer(db, analysis_run_id=analysis_run_id, answer=answer)
         except Exception:  # noqa: BLE001
             if content.strip():
                 answer = AgentAnswer(
@@ -156,14 +174,7 @@ def run_agent(
                     memory_ids=memory_ids,
                     confidence=0.5,
                 )
-                persist_agent_turn(
-                    db,
-                    analysis_run_id=analysis_run_id,
-                    role="assistant",
-                    content=answer.answer,
-                    tool_trace=trace,
-                )
-                return answer
+                return _persist_answer(db, analysis_run_id=analysis_run_id, answer=answer)
             break
 
     findings = findings_to_dicts(analysis_run_id, db)
@@ -196,11 +207,4 @@ def run_agent(
             tool_trace=trace or ["list_findings"],
             confidence=0.75,
         )
-    persist_agent_turn(
-        db,
-        analysis_run_id=analysis_run_id,
-        role="assistant",
-        content=answer.answer,
-        tool_trace=answer.tool_trace,
-    )
-    return answer
+    return _persist_answer(db, analysis_run_id=analysis_run_id, answer=answer)

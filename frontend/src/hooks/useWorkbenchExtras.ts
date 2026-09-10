@@ -69,7 +69,7 @@ export function useWorkbenchExtras(projectId: number | undefined, analysisId: nu
     },
     onSuccess: (data) => {
       if (data.url) window.open(data.url, '_blank', 'noopener')
-      else toast.message(data.message ?? 'Connect nicht verfügbar — Hinweis in der Statuszeile.')
+      else toast.message(data.message ?? 'Connect nicht verfügbar. Hinweis in der Statuszeile.')
       void qc.invalidateQueries({ queryKey: ['integrations'] })
     },
   })
@@ -120,9 +120,12 @@ export function useWorkbenchExtras(projectId: number | undefined, analysisId: nu
   return {
     integrations: integrations.data,
     documents: documents.data?.documents ?? [],
+    documentsLoading: documents.isPending,
+    documentsError: documents.isError,
     pendingMappings: mappings.data?.mappings ?? [],
     uploadPending: uploadDoc.isPending,
     onUploadDocument: (file: File) => uploadDoc.mutate(file),
+    retryDocuments: () => void documents.refetch(),
     onConnect: () => connect.mutate(),
     onDraftAction: draftFromInspector.mutate,
     onApproveMapping: (id: number) => approveMapping.mutate(id),

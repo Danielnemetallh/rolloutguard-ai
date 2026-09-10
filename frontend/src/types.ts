@@ -82,11 +82,30 @@ export type AgentResult = {
     site_ids: string[]
     evidence_ids: string[]
     memory_ids?: string[]
+    citations?: AgentCitation[]
     proposed_action_ids?: number[]
     tool_trace: string[]
     abstained: boolean
     confidence: number
   }
+}
+
+export type AgentCitation = {
+  id: string
+  sourceKind: 'workbook_cell' | 'document_chunk'
+  label: string
+  locator: string
+  snippet: string | null
+  evidenceId: string | null
+  documentId: number | null
+}
+
+export type AgentTurn = {
+  id: string
+  analysisRunId: number
+  question: string
+  status: 'pending' | 'complete' | 'error'
+  result?: AgentResult
 }
 
 export type ProposedAction = {

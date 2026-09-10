@@ -1,9 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
+import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { API_BASE } from '@/lib/api'
-import type { ProposedAction } from '../types'
+import type { ProposedAction } from '@/types'
 
 const TYPE_LABELS: Record<string, string> = {
   calendar: 'Kalender',
@@ -18,94 +15,112 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 type ActionsQueueProps = {
-  projectId: number | undefined
+  actions: ProposedAction[]
+  loading?: boolean
+  error?: boolean
+  compact?: boolean
+  mutationPending?: boolean
+  onConfirm: (id: number) => void
+  onDismiss: (id: number) => void
+  onRetry: () => void
 }
 
-export function ActionsQueue({ projectId }: ActionsQueueProps) {
-  const qc = useQueryClient()
-  const list = useQuery({
-    queryKey: ['actions', projectId],
-    enabled: projectId != null,
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/actions`)
-      if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<{ actions: ProposedAction[] }>
-    },
-    refetchInterval: 8000,
-  })
+function actionSummary(action: ProposedAction) {
+  return String(
+    action.payload.title ?? action.payload.subject ?? action.payload.message ?? 'Kein Betreff',
+  )
+}
 
-  const confirm = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch(`${API_BASE}/api/actions/${id}/confirm`, { method: 'POST' })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json()
-    },
-    onSuccess: () => {
-      toast.success('Freigegeben')
-      void qc.invalidateQueries({ queryKey: ['actions'] })
-    },
-    onError: () => toast.error('Freigabe fehlgeschlagen'),
-  })
-
-  const dismiss = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch(`${API_BASE}/api/actions/${id}/dismiss`, { method: 'POST' })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json()
-    },
-    onSuccess: () => {
-      toast.success('Verworfen')
-      void qc.invalidateQueries({ queryKey: ['actions'] })
-    },
-  })
-
-  const drafts = (list.data?.actions ?? []).filter((a) => a.status === 'draft')
-  const badge = drafts.filter((a) => a.action_type === 'watch_fire').length
+export function ActionsQueue({
+  actions,
+  loading = false,
+  error = false,
+  compact = false,
+  mutationPending = false,
+  onConfirm,
+  onDismiss,
+  onRetry,
+}: ActionsQueueProps) {
+  const visibleActions = compact
+    ? actions.filter((action) => action.status === 'draft').slice(0, 3)
+    : actions
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between py-3">
-        <CardTitle className="text-sm">Aktionsqueue</CardTitle>
-        {badge > 0 && (
-          <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
-            {badge} Watch
-          </span>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {drafts.length === 0 && (
-          <p className="text-sm text-muted-foreground">Keine offenen Entwürfe.</p>
-        )}
-        {drafts.map((action) => (
-          <div
-            key={action.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
-          >
-            <div>
-              <p className="font-medium">
-                {TYPE_LABELS[action.action_type] ?? action.action_type} #{action.id}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {(action.site_ids ?? []).join(', ') || '—'} ·{' '}
-                {String(action.payload.title ?? action.payload.subject ?? action.payload.message ?? '')}
-              </p>
+    <section
+      className="overflow-hidden border border-border bg-[var(--surface-raised)]"
+      aria-label="Aktionsqueue"
+    >
+      <header className="flex items-center justify-between border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Aktionsqueue</h2>
+        <span className="font-mono text-xs text-muted-foreground">
+          {actions.filter((action) => action.status === 'draft').length} offen
+        </span>
+      </header>
+      {loading && (
+        <div
+          className="m-4 h-14 animate-pulse rounded bg-muted"
+          aria-label="Aktionen werden geladen"
+        />
+      )}
+      {error && (
+        <div className="m-4 flex items-center justify-between gap-3 text-sm text-[var(--critical)]">
+          <span>Aktionen konnten nicht geladen werden.</span>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            <RotateCcw className="size-3.5" /> Wiederholen
+          </Button>
+        </div>
+      )}
+      {!loading && !error && visibleActions.length === 0 && (
+        <p className="px-4 py-6 text-sm text-muted-foreground">
+          Keine Aktionen in dieser Ansicht.
+        </p>
+      )}
+      {!loading && !error && visibleActions.length > 0 && (
+        <div className="divide-y divide-border">
+          {visibleActions.map((action) => (
+            <div
+              key={action.id}
+              className="grid min-h-14 gap-3 px-4 py-3 text-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">
+                    {TYPE_LABELS[action.action_type] ?? action.action_type} #{action.id}
+                  </span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
+                    {action.status}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {(action.site_ids ?? []).join(', ') || 'Ohne Standort'}: {actionSummary(action)}
+                </p>
+              </div>
+              {action.status === 'draft' && (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={mutationPending}
+                    onClick={() => onConfirm(action.id)}
+                  >
+                    Freigeben
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={mutationPending}
+                    onClick={() => onDismiss(action.id)}
+                  >
+                    Verwerfen
+                  </Button>
+                </div>
+              )}
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => confirm.mutate(action.id)} disabled={confirm.isPending}>
-                Freigeben
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => dismiss.mutate(action.id)}
-                disabled={dismiss.isPending}
-              >
-                Verwerfen
-              </Button>
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+          ))}
+        </div>
+      )}
+      <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+        Keine externe Aktion wird ohne Freigabe ausgeführt.
+      </p>
+    </section>
   )
 }

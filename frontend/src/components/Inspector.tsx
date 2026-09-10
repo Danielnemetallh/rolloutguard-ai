@@ -179,7 +179,7 @@ export function Inspector({
 
               {reviewError && (
                 <p className="text-sm text-[var(--warn)]">
-                  Prüfung konnte nicht gespeichert werden — läuft die API?
+                  Prüfung konnte nicht gespeichert werden. Läuft die API?
                 </p>
               )}
               {reviewSuccess && reviewClosed && (

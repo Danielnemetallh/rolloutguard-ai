@@ -66,7 +66,7 @@ def assistant_query(body: AssistantQuery, db: Session = Depends(get_db)) -> dict
     )
     return {
         "provider": provider.name,
-        "result": answer.model_dump(),
+        "result": answer.model_dump(by_alias=True),
     }
 
 

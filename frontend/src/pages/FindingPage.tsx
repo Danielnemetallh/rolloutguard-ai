@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { Inspector } from '@/components/Inspector'
-import { useWorkbench } from '@/context/WorkbenchContext'
+import { useWorkbench } from '@/context/workbench'
 import type { Timeline } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''

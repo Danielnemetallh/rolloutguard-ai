@@ -1,6 +1,5 @@
 import { Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { severityBadgeVariant, severityLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
@@ -11,6 +10,9 @@ type QueueProps = {
   findings: Finding[]
   totalCount: number | undefined
   visibleCount: number
+  loading?: boolean
+  error?: boolean
+  selectedId?: number | null
   search: string
   severity: string
   sortKey: SortKey
@@ -22,6 +24,7 @@ type QueueProps = {
   onToggleSort: (key: SortKey) => void
   onSelect: (finding: Finding) => void
   onHeroSelect: (hero: HeroFinding) => void
+  onRetry?: () => void
 }
 
 const SEVERITY_FILTERS = [
@@ -40,6 +43,9 @@ export function Queue({
   findings,
   totalCount,
   visibleCount,
+  loading = false,
+  error = false,
+  selectedId = null,
   search,
   severity,
   sortKey,
@@ -51,12 +57,16 @@ export function Queue({
   onToggleSort,
   onSelect,
   onHeroSelect,
+  onRetry,
 }: QueueProps) {
   return (
-    <Card className="flex min-h-[420px] flex-col overflow-hidden" aria-label="Befunde">
+    <section
+      className="flex min-h-[360px] flex-col overflow-hidden border border-border bg-[var(--surface-raised)]"
+      aria-label="Befunde"
+    >
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h2 className="font-heading text-sm font-semibold">
-          Befunde
+        <h2 className="text-sm font-semibold">
+          Ausnahmen
           {totalCount != null && ` (${visibleCount}/${totalCount})`}
         </h2>
       </div>
@@ -97,12 +107,31 @@ export function Queue({
       )}
 
       <div className="flex-1 overflow-auto px-4 pb-4">
+        {loading && (
+          <div className="space-y-2 py-4" aria-label="Ausnahmen werden geladen">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="h-10 animate-pulse rounded bg-muted" />
+            ))}
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center justify-between gap-3 py-6 text-sm text-[var(--critical)]">
+            <span>Ausnahmen konnten nicht geladen werden.</span>
+            <button
+              type="button"
+              className="font-medium text-primary hover:underline"
+              onClick={onRetry}
+            >
+              Wiederholen
+            </button>
+          </div>
+        )}
         {!analysisId && (
           <p className="py-6 text-sm text-muted-foreground">
             Analyse starten, um die Ausnahme-Warteschlange zu füllen.
           </p>
         )}
-        {analysisId != null && !findings.length && !showHeroHints && (
+        {!loading && !error && analysisId != null && !findings.length && !showHeroHints && (
           <p className="py-6 text-sm text-muted-foreground">
             {search.trim()
               ? `Keine Befunde für „${search}".`
@@ -136,19 +165,25 @@ export function Queue({
           </div>
         )}
 
-        {findings.length > 0 && (
+        {!loading && !error && findings.length > 0 && (
           <div className="overflow-hidden rounded-md border border-border">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <th className="cursor-pointer px-3 py-2" onClick={() => onToggleSort('severity')}>
-                    Schwere{sortIndicator(sortKey === 'severity', sortDir)}
+                  <th className="px-3 py-2">
+                    <button type="button" onClick={() => onToggleSort('severity')}>
+                      Schwere{sortIndicator(sortKey === 'severity', sortDir)}
+                    </button>
                   </th>
-                  <th className="cursor-pointer px-3 py-2" onClick={() => onToggleSort('site_id')}>
-                    Standort{sortIndicator(sortKey === 'site_id', sortDir)}
+                  <th className="px-3 py-2">
+                    <button type="button" onClick={() => onToggleSort('site_id')}>
+                      Standort{sortIndicator(sortKey === 'site_id', sortDir)}
+                    </button>
                   </th>
-                  <th className="cursor-pointer px-3 py-2" onClick={() => onToggleSort('rule_id')}>
-                    Regel{sortIndicator(sortKey === 'rule_id', sortDir)}
+                  <th className="px-3 py-2">
+                    <button type="button" onClick={() => onToggleSort('rule_id')}>
+                      Regel{sortIndicator(sortKey === 'rule_id', sortDir)}
+                    </button>
                   </th>
                   <th className="px-3 py-2">Meldung</th>
                 </tr>
@@ -157,8 +192,21 @@ export function Queue({
                 {findings.map((f) => (
                   <tr
                     key={f.id}
-                    className="cursor-pointer border-b border-border transition-colors hover:bg-muted/50"
+                    tabIndex={0}
+                    aria-selected={selectedId === f.id}
+                    className={cn(
+                      'h-11 cursor-pointer border-b border-border transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/35',
+                      f.severity === 'critical' && 'bg-[var(--critical-bg)]/55',
+                      selectedId === f.id &&
+                        'bg-[var(--selection)] shadow-[inset_0_0_0_1px_var(--primary)]',
+                    )}
                     onClick={() => onSelect(f)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onSelect(f)
+                      }
+                    }}
                   >
                     <td className="px-3 py-2">
                       <Badge variant={severityBadgeVariant(f.severity)}>
@@ -175,6 +223,6 @@ export function Queue({
           </div>
         )}
       </div>
-    </Card>
+    </section>
   )
 }
