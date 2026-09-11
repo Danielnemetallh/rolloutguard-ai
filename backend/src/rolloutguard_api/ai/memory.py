@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -23,10 +24,26 @@ CHUNK_CHARS = 2000
 CHUNK_OVERLAP = 200
 
 
+_SESSION_ID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+SESSION_TITLE_KEY = "_session_title"
+
+
+def new_session_id() -> str:
+    return str(uuid4())
+
+
+def is_session_id(value: str) -> bool:
+    return bool(_SESSION_ID_RE.match(value.strip()))
+
+
 def persist_agent_turn(
     db: Session,
     *,
     analysis_run_id: int,
+    session_id: str,
     role: str,
     content: str,
     tool_trace: list[str] | None = None,
@@ -34,6 +51,7 @@ def persist_agent_turn(
 ) -> models.AgentMessage:
     row = models.AgentMessage(
         analysis_run_id=analysis_run_id,
+        session_id=session_id,
         role=role,
         content=content,
         tool_trace_json=tool_trace or [],
@@ -45,13 +63,58 @@ def persist_agent_turn(
     return row
 
 
-def recall_session(
-    db: Session, analysis_run_id: int, limit: int = MAX_SESSION_TURNS
-) -> list[dict[str, Any]]:
-    rows = (
+def latest_session_id(db: Session, analysis_run_id: int) -> str | None:
+    row = (
         db.query(models.AgentMessage)
         .filter_by(analysis_run_id=analysis_run_id)
         .order_by(models.AgentMessage.id.desc())
+        .first()
+    )
+    if row is None or not row.session_id:
+        return None
+    return row.session_id
+
+
+def resolve_session_id(
+    db: Session,
+    *,
+    analysis_run_id: int,
+    session_id: str | None,
+) -> str:
+    """Continue a given session, or the latest for the run, or start a new one."""
+    if session_id:
+        candidate = session_id.strip()
+        if not is_session_id(candidate):
+            raise ValueError("invalid_session_id")
+        existing = db.query(models.AgentMessage).filter_by(session_id=candidate).first()
+        if existing is not None and existing.analysis_run_id != analysis_run_id:
+            raise ValueError("session_run_mismatch")
+        return candidate
+    return latest_session_id(db, analysis_run_id) or new_session_id()
+
+
+def _message_payload(row: models.AgentMessage) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "role": row.role,
+        "content": row.content,
+        "tool_trace": row.tool_trace_json,
+        "citations": row.citation_json,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def recall_session(
+    db: Session,
+    analysis_run_id: int,
+    session_id: str | None = None,
+    limit: int = MAX_SESSION_TURNS,
+) -> list[dict[str, Any]]:
+    query = db.query(models.AgentMessage).filter_by(analysis_run_id=analysis_run_id)
+    if session_id:
+        query = query.filter_by(session_id=session_id)
+    rows = (
+        query.order_by(models.AgentMessage.id.desc())
         .limit(max(1, min(limit, 16)))
         .all()
     )
@@ -64,6 +127,7 @@ def recall_session(
             break
         packed.append(
             {
+                "id": row.id,
                 "role": row.role,
                 "content": row.content,
                 "tool_trace": row.tool_trace_json,
@@ -71,6 +135,116 @@ def recall_session(
             }
         )
     return packed
+
+
+def _session_preview(messages: list[models.AgentMessage]) -> str:
+    if not messages:
+        return ""
+    user_turns = [message for message in messages if message.role == "user"]
+    anchor = user_turns[0] if user_turns else messages[0]
+    title = (anchor.citation_json or {}).get(SESSION_TITLE_KEY)
+    if isinstance(title, str) and title.strip():
+        return title.strip()[:200]
+    return anchor.content[:160]
+
+
+def delete_agent_session(db: Session, session_id: str) -> bool:
+    if not is_session_id(session_id):
+        return False
+    deleted = db.query(models.AgentMessage).filter_by(session_id=session_id).delete()
+    db.commit()
+    return deleted > 0
+
+
+def rename_agent_session(db: Session, session_id: str, title: str) -> bool:
+    if not is_session_id(session_id):
+        return False
+    clean = title.strip()[:200]
+    if not clean:
+        return False
+    row = (
+        db.query(models.AgentMessage)
+        .filter_by(session_id=session_id, role="user")
+        .order_by(models.AgentMessage.id.asc())
+        .first()
+    )
+    if row is None:
+        row = (
+            db.query(models.AgentMessage)
+            .filter_by(session_id=session_id)
+            .order_by(models.AgentMessage.id.asc())
+            .first()
+        )
+    if row is None:
+        return False
+    citations = dict(row.citation_json or {})
+    citations[SESSION_TITLE_KEY] = clean
+    row.citation_json = citations
+    db.commit()
+    return True
+
+
+def list_agent_sessions(db: Session, analysis_run_id: int) -> list[dict[str, Any]]:
+    rows = (
+        db.query(models.AgentMessage)
+        .filter_by(analysis_run_id=analysis_run_id)
+        .order_by(models.AgentMessage.id.asc())
+        .all()
+    )
+    grouped: dict[str, list[models.AgentMessage]] = {}
+    order: list[str] = []
+    for row in rows:
+        sid = row.session_id
+        if not sid:
+            continue
+        if sid not in grouped:
+            grouped[sid] = []
+            order.append(sid)
+        grouped[sid].append(row)
+
+    summaries: list[dict[str, Any]] = []
+    for sid in order:
+        messages = grouped[sid]
+        user_turns = [m for m in messages if m.role == "user"]
+        preview = _session_preview(messages)
+        summaries.append(
+            {
+                "session_id": sid,
+                "analysis_run_id": analysis_run_id,
+                "preview": preview,
+                "turn_count": len(user_turns),
+                "created_at": (
+                    messages[0].created_at.isoformat() if messages[0].created_at else None
+                ),
+                "updated_at": (
+                    messages[-1].created_at.isoformat() if messages[-1].created_at else None
+                ),
+            }
+        )
+    summaries.sort(key=lambda item: item["updated_at"] or "", reverse=True)
+    return summaries
+
+
+def get_agent_session(db: Session, session_id: str) -> dict[str, Any] | None:
+    if not is_session_id(session_id):
+        return None
+    rows = (
+        db.query(models.AgentMessage)
+        .filter_by(session_id=session_id)
+        .order_by(models.AgentMessage.id.asc())
+        .all()
+    )
+    if not rows:
+        return None
+    return {
+        "session_id": session_id,
+        "analysis_run_id": rows[0].analysis_run_id,
+        "preview": _session_preview(rows),
+        "turn_count": sum(1 for r in rows if r.role == "user"),
+        "created_at": rows[0].created_at.isoformat() if rows[0].created_at else None,
+        "updated_at": rows[-1].created_at.isoformat() if rows[-1].created_at else None,
+        "messages": [_message_payload(row) for row in rows],
+    }
 
 
 def record_decision(

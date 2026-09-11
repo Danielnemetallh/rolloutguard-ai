@@ -12,10 +12,12 @@ data, no silent writeback, no containers.
   `normalize.py` → `reconcile.py` → `rules.py` → `analysis.py`. AI lives in `ai/`
   (provider, enrichment, allowlisted agent + tools, memory). Documents and confirm
   adapters in `services/documents.py`, `services/actions.py`,
-  `integrations/composio_executor.py`. Domain schema + synthetic generator in `domain/`.
+  `integrations/composio_executor.py` (writes after Freigeben) and
+  `integrations/composio_connect.py` (`ck_` Connect keys). Domain schema + synthetic
+  generator in `domain/`.
 - `frontend/src/` — React + TanStack Query workbench (German demo UI):
   `pages/Leitstand.tsx` (queue), `pages/FindingPage.tsx` (`/befund/:id`), state in
-  `context/WorkbenchContext.tsx` + `hooks/`. Vite proxies `/api` to the backend.
+  `context/WorkbenchContext.tsx` + `hooks/`. Vite proxies `/api` to the backend on port 8001.
 - `data/synthetic/` — checked-in demo workbooks + docs; `data/uploads/` is runtime-only
   (gitignored).
 - `scripts/` — PowerShell local runners (`dev-api.ps1`, `dev-web.ps1`,
@@ -27,7 +29,7 @@ data, no silent writeback, no containers.
 
 ```powershell
 Copy-Item .env.example .env
-.\scripts\dev-api.ps1          # uvicorn :8000
+.\scripts\dev-api.ps1          # uvicorn :8001
 .\scripts\dev-web.ps1          # vite :5173
 .\scripts\generate-synthetic.ps1
 cd backend; uv sync

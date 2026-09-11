@@ -186,6 +186,9 @@ class AgentMessage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     analysis_run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"), index=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36), index=True, default="", server_default=""
+    )
     role: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text)
     tool_trace_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
