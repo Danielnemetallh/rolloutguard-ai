@@ -1,22 +1,11 @@
-import { Bot, CornerDownLeft, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react'
-import { useMemo } from 'react'
+import { Bot, CornerDownLeft, Crosshair, History, Paperclip, RotateCcw, SquarePen, X } from 'lucide-react'
+import { useMemo, useRef } from 'react'
+import { AgentSessionHistory } from '@/components/AgentSessionHistory'
 import { CitationList } from '@/components/CitationList'
+import { PermissionPrompt } from '@/components/PermissionPrompt'
 import { Button } from '@/components/ui/button'
-import { QUESTION_CHIPS } from '@/lib/agentQuestions'
-import type { AgentTurn, ProposedAction } from '@/types'
-
-const TOOL_TRACE_LABELS: Record<string, string> = {
-  get_portfolio_kpis: 'Kennzahlen gelesen',
-  list_findings: 'Befunde gelistet',
-  get_site_timeline: 'Projektverlauf geladen',
-  get_rule_definition: 'Regeldefinition geladen',
-  recall_session: 'Sitzung gelesen',
-  search_decisions: 'Entscheidungen gesucht',
-  search_corpus: 'Dokumentkorpus durchsucht',
-  get_site_summary: 'Standortzusammenfassung gelesen',
-  list_documents: 'Dokumente gelistet',
-  extract_document: 'Dokument gelesen',
-}
+import type { AgentViewportContext } from '@/hooks/useAgentViewportContext'
+import type { AgentSessionSummary, AgentTurn, ProposedAction } from '@/types'
 
 type AgentSidebarProps = {
   collapsed: boolean
@@ -25,10 +14,24 @@ type AgentSidebarProps = {
   turns: AgentTurn[]
   actions: ProposedAction[]
   onToggle: () => void
+  onNewSession?: () => void
+  onShowHistory?: () => void
+  historyOpen?: boolean
+  savedSessions?: AgentSessionSummary[]
+  onResumeSession?: (sessionId: string) => void
+  onDeleteSession?: (sessionId: string) => void
+  onRenameSession?: (sessionId: string, title: string) => void
+  onCloseHistory?: () => void
+  viewport?: AgentViewportContext
   onDraftChange: (value: string) => void
   onSubmit: (question?: string) => void
   onRetry: (turnId: string) => void
   onConfirmAction: (actionId: number) => void
+  onDismissAction?: (actionId: number) => void
+  actionMutationPending?: boolean
+  projectId?: number
+  uploadPending?: boolean
+  onUploadDocument?: (file: File) => void
   onEvidenceSelect?: (evidenceId: string) => void
 }
 
@@ -39,34 +42,51 @@ export function AgentSidebar({
   turns,
   actions,
   onToggle,
+  onNewSession,
+  onShowHistory,
+  historyOpen = false,
+  savedSessions = [],
+  onResumeSession,
+  onDeleteSession,
+  onRenameSession,
+  onCloseHistory,
+  viewport,
   onDraftChange,
   onSubmit,
   onRetry,
   onConfirmAction,
+  onDismissAction,
+  actionMutationPending = false,
+  projectId,
+  uploadPending = false,
+  onUploadDocument,
   onEvidenceSelect,
 }: AgentSidebarProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const pending = turns.some((turn) => turn.status === 'pending')
   const latestCompleteId = useMemo(
     () => [...turns].reverse().find((turn) => turn.status === 'complete')?.id,
     [turns],
   )
+  const attachTitle = uploadPending
+    ? 'Dokument wird gelesen…'
+    : 'Dokument in den Korpus aufnehmen (nicht an diese Nachricht)'
 
   if (collapsed) {
     return (
-      <div className="flex h-dvh flex-col items-center border-l border-border bg-[var(--surface-raised)] py-3">
-        <Bot className="size-4 text-primary" aria-hidden="true" />
-        {pending && <span className="mt-2 size-1.5 rounded-full bg-[var(--warning)]" aria-label="Antwort ausstehend" />}
-        <button
-          type="button"
-          className="mt-3 flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/40"
-          onClick={onToggle}
-          aria-controls="evidence-agent"
-          aria-expanded={false}
-          aria-label="Agent öffnen"
-        >
-          <PanelRightOpen className="size-4" />
-        </button>
-      </div>
+      <button
+        type="button"
+        className="agent-launcher"
+        onClick={onToggle}
+        aria-controls="evidence-agent"
+        aria-expanded={false}
+        aria-label="Evidenz-Copilot öffnen"
+      >
+        <Bot className="size-5 text-primary" aria-hidden="true" />
+        {pending && (
+          <span className="agent-launcher-badge" aria-label="Antwort ausstehend" />
+        )}
+      </button>
     )
   }
 
@@ -78,166 +98,198 @@ export function AgentSidebar({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold">Evidenz-Copilot</h2>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {analysisId ? `Lauf #${analysisId}, verankerte Antworten` : 'Kein Lauf ausgewählt'}
-          </p>
         </div>
-        <button
-          type="button"
-          className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
-          onClick={onToggle}
-          aria-controls="evidence-agent"
-          aria-expanded={true}
-          aria-label="Agent einklappen"
-        >
-          <PanelRightClose className="size-4" />
-        </button>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5" aria-label="Agent-Unterhaltung">
-        {turns.length === 0 && (
-          <div className="space-y-4">
-            <p className="max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
-              Fragen Sie nach Befunden, Dokumenten oder nächsten Schritten. Der Copilot kann nur Entwürfe anlegen.
-            </p>
-            <details className="text-sm">
-              <summary className="cursor-pointer font-medium text-primary">Beispielfragen</summary>
-              <div className="mt-2 space-y-1.5">
-                {QUESTION_CHIPS.map((question) => (
-                  <button
-                    key={question}
-                    type="button"
-                    disabled={!analysisId}
-                    onClick={() => onSubmit(question)}
-                    className="block w-full border-b border-border px-1 py-2 text-left text-xs leading-relaxed hover:text-primary disabled:opacity-50"
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            </details>
-          </div>
-        )}
-
-        <div className="space-y-7">
-          {turns.map((turn) => {
-            const proposedActions = actions.filter((action) =>
-              (turn.result?.result.proposed_action_ids ?? []).includes(action.id),
-            )
-            return (
-              <article key={turn.id} className="space-y-3 border-b border-border pb-6 last:border-0">
-                <section
-                  role="region"
-                  aria-label="Nachricht von Sie"
-                  className="ml-auto max-w-[88%] border-r-2 border-primary bg-[var(--message-user)] px-3 py-2.5"
-                >
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Sie</p>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{turn.question}</p>
-                </section>
-
-                <section
-                  role="region"
-                  aria-label="Antwort von Evidenz-Copilot"
-                  className="mr-auto w-full px-1 py-2"
-                >
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Evidenz-Copilot
-                  </p>
-                  {turn.status === 'pending' && (
-                    <div className="space-y-2" aria-label="Antwort wird erstellt">
-                      <span className="text-xs text-muted-foreground">Antwort wird erstellt</span>
-                      <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
-                      <div className="h-3 w-3/5 animate-pulse rounded bg-muted" />
-                    </div>
-                  )}
-                  {turn.status === 'error' && (
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm text-[var(--critical)]">Antwort konnte nicht geladen werden.</p>
-                      <Button size="sm" variant="outline" onClick={() => onRetry(turn.id)}>
-                        <RotateCcw className="size-3.5" /> Wiederholen
-                      </Button>
-                    </div>
-                  )}
-                  {turn.status === 'complete' && turn.result && (
-                    <>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {turn.result.result.answer}
-                      </p>
-                      <CitationList
-                        citations={turn.result.result.citations ?? []}
-                        onEvidenceSelect={onEvidenceSelect}
-                      />
-                      {proposedActions.length > 0 && (
-                        <div className="mt-4 space-y-2 border-t border-border pt-3">
-                          <p className="text-xs font-medium">Vorgeschlagene Aktionen</p>
-                          {proposedActions.map((action) => (
-                            <div key={action.id} className="flex items-center justify-between gap-3 border-y border-border px-1 py-2 text-xs">
-                              <span className="truncate">{action.action_type} #{action.id}</span>
-                              {action.status === 'draft' ? (
-                                <Button size="sm" onClick={() => onConfirmAction(action.id)}>Freigeben</Button>
-                              ) : (
-                                <span className="text-muted-foreground">{action.status}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {turn.result.result.tool_trace.length > 0 && (
-                        <details className="mt-3 text-xs text-muted-foreground">
-                          <summary className="cursor-pointer font-medium">
-                            Verwendete Werkzeuge ({turn.result.result.tool_trace.length})
-                          </summary>
-                          <ul className="mt-2 space-y-1 pl-4">
-                            {turn.result.result.tool_trace.map((tool, index) => (
-                              <li key={`${tool}-${index}`}>{TOOL_TRACE_LABELS[tool] ?? tool}</li>
-                            ))}
-                          </ul>
-                        </details>
-                      )}
-                    </>
-                  )}
-                </section>
-              </article>
-            )
-          })}
-        </div>
-        <div className="sr-only" aria-live="polite">
-          {latestCompleteId ? 'Antwort des Evidenz-Copiloten abgeschlossen.' : ''}
-        </div>
-      </div>
-
-      <form
-        className="shrink-0 border-t border-border bg-[var(--surface-raised)] p-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          onSubmit()
-        }}
-      >
-        <label htmlFor="agent-question" className="sr-only">Frage an den Evidenz-Copiloten</label>
-        <div className="relative">
-          <textarea
-            id="agent-question"
-            value={draft}
-            disabled={!analysisId}
-            rows={3}
-            maxLength={2000}
-            placeholder="Frage zu diesem Analyse-Lauf"
-            onChange={(event) => onDraftChange(event.target.value)}
-            className="w-full resize-none rounded-md border border-input bg-background px-3 py-2.5 pr-11 text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
-          />
+        <div className="flex items-center gap-1">
           <button
-            type="submit"
-            aria-label="Frage senden"
-            disabled={!analysisId || !draft.trim() || pending}
-            className="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
+            type="button"
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-40"
+            onClick={onNewSession}
+            disabled={!analysisId || !onNewSession}
+            aria-label="Neue Sitzung"
+            title="Neue Sitzung"
           >
-            <CornerDownLeft className="size-4" />
+            <SquarePen className="size-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-40"
+            onClick={onShowHistory}
+            disabled={!analysisId || !onShowHistory}
+            aria-label="Sitzungsverlauf"
+            title="Sitzungsverlauf"
+          >
+            <History className="size-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+            onClick={onToggle}
+            aria-controls="evidence-agent"
+            aria-expanded={true}
+            aria-label="Evidenz-Copilot schließen"
+            title="Schließen"
+          >
+            <X className="size-4" aria-hidden="true" />
           </button>
         </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          Keine externe Aktion wird ohne Freigabe ausgeführt.
-        </p>
-      </form>
+      </header>
+
+      {historyOpen ? (
+        <AgentSessionHistory
+          sessions={savedSessions}
+          onResume={onResumeSession}
+          onRename={onRenameSession}
+          onDelete={onDeleteSession}
+          onClose={onCloseHistory}
+        />
+      ) : (
+        <>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5" aria-label="Agent-Unterhaltung">
+            {turns.length === 0 && (
+              <p className="max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
+                Fragen Sie nach Befunden, Dokumenten, Kalender oder nächsten Schritten.
+              </p>
+            )}
+
+            <div className="space-y-7">
+              {turns.map((turn) => {
+                const proposedActions = actions.filter((action) =>
+                  (turn.result?.result.proposed_action_ids ?? []).includes(action.id),
+                )
+                return (
+                  <article key={turn.id} className="space-y-3 border-b border-border pb-6 last:border-0">
+                    <section
+                      role="region"
+                      aria-label="Nachricht von Sie"
+                      className="ml-auto max-w-[88%] border-r-2 border-primary bg-[var(--message-user)] px-3 py-2.5"
+                    >
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Sie</p>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{turn.question}</p>
+                    </section>
+
+                    <section
+                      role="region"
+                      aria-label="Antwort von Evidenz-Copilot"
+                      className="mr-auto w-full px-1 py-2"
+                    >
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Evidenz-Copilot
+                      </p>
+                      {turn.status === 'pending' && (
+                        <div className="space-y-2" aria-label="Antwort wird erstellt">
+                          <span className="text-xs text-muted-foreground">Antwort wird erstellt</span>
+                          <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
+                          <div className="h-3 w-3/5 animate-pulse rounded bg-muted" />
+                        </div>
+                      )}
+                      {turn.status === 'error' && (
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm text-[var(--critical)]">Antwort konnte nicht geladen werden.</p>
+                          <Button size="sm" variant="outline" onClick={() => onRetry(turn.id)}>
+                            <RotateCcw className="size-3.5" /> Wiederholen
+                          </Button>
+                        </div>
+                      )}
+                      {turn.status === 'complete' && turn.result && (
+                        <>
+                          <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                            {turn.result.result.answer}
+                          </p>
+                          <CitationList
+                            citations={turn.result.result.citations ?? []}
+                            onEvidenceSelect={onEvidenceSelect}
+                          />
+                          {proposedActions.length > 0 && (
+                            <p className="mt-3 text-xs text-muted-foreground">
+                              {proposedActions.some((action) => action.status === 'draft')
+                                ? 'Freigabe unten in der Seitenleiste.'
+                                : proposedActions.map((action) => `${action.action_type}: ${action.status}`).join(' · ')}
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </section>
+                  </article>
+                )
+              })}
+            </div>
+            <div className="sr-only" aria-live="polite">
+              {latestCompleteId ? 'Antwort des Evidenz-Copiloten abgeschlossen.' : ''}
+            </div>
+          </div>
+
+          <PermissionPrompt
+            actions={actions}
+            mutationPending={actionMutationPending}
+            onConfirm={onConfirmAction}
+            onDismiss={onDismissAction ?? (() => undefined)}
+          />
+
+          <form
+            className="shrink-0 bg-[var(--surface-raised)] p-4 pt-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              onSubmit()
+            }}
+          >
+            <label htmlFor="agent-question" className="sr-only">Frage an den Evidenz-Copiloten</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.docx,.txt,.md,application/pdf"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) onUploadDocument?.(file)
+                event.target.value = ''
+              }}
+            />
+            <div className="flex flex-col gap-2 rounded-xl border border-input bg-background px-2.5 py-2 focus-within:ring-2 focus-within:ring-ring/35">
+              {viewport?.label && (
+                <div className="px-0.5">
+                  <span
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-[var(--surface-subtle)] px-2.5 py-1 text-[11px] text-muted-foreground"
+                    title={viewport.label}
+                  >
+                    <Crosshair className="size-3 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="truncate">{viewport.label}</span>
+                  </span>
+                </div>
+              )}
+              <textarea
+                id="agent-question"
+                value={draft}
+                disabled={!analysisId}
+                rows={3}
+                maxLength={2000}
+                placeholder="Frage zu diesem Analyse-Lauf"
+                onChange={(event) => onDraftChange(event.target.value)}
+                className="min-h-[4.5rem] w-full resize-none border-0 bg-transparent px-1 py-0.5 text-sm leading-relaxed focus-visible:outline-none"
+              />
+              <div className="flex items-center justify-between gap-2 px-0.5">
+                <button
+                  type="button"
+                  aria-label="Dokument in den Korpus aufnehmen"
+                  title={attachTitle}
+                  disabled={!projectId || uploadPending || !onUploadDocument}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  <Paperclip className="size-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="submit"
+                  aria-label="Frage senden"
+                  disabled={!analysisId || !draft.trim() || pending}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
+                >
+                  <CornerDownLeft className="size-4" />
+                </button>
+              </div>
+            </div>
+          </form>
+        </>
+      )}
     </div>
   )
 }

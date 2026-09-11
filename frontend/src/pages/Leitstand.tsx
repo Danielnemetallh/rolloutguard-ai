@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
-import { ActionsQueue } from '@/components/ActionsQueue'
+import { Play, Share } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { QueueWorkspace } from '@/components/QueueWorkspace'
 import { RunStrip } from '@/components/RunStrip'
 import { useWorkbench } from '@/context/workbench'
@@ -17,9 +17,30 @@ export function Leitstand() {
             Priorisierte Abweichungen aus Vertrag, Terminplan und Standortstatus.
           </p>
         </div>
-        <p className="font-mono text-xs text-muted-foreground">
-          {workbench.analysisId ? `Aktiver Lauf #${workbench.analysisId}` : 'Noch kein Lauf'}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-mono text-xs text-muted-foreground">
+            {workbench.analysisId ? `Aktiver Lauf #${workbench.analysisId}` : 'Noch kein Lauf'}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!workbench.projectId || workbench.analyzePending}
+            onClick={workbench.onAnalyze}
+          >
+            <Play className="size-4" />
+            {workbench.analyzePending ? 'Analysiere…' : 'Analyse starten'}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!workbench.analysisId || workbench.exportPending}
+            onClick={workbench.onExport}
+          >
+            <Share className="size-4" />
+            {workbench.exportPending ? 'Exportiere…' : 'Export'}
+          </Button>
+        </div>
       </header>
 
       <RunStrip
@@ -30,24 +51,7 @@ export function Leitstand() {
         onSelectRun={workbench.onSelectRun}
       />
 
-      <div className="dashboard-grid">
-        <QueueWorkspace compact />
-        <div className="space-y-3">
-          <ActionsQueue
-            compact
-            actions={workbench.actions}
-            loading={workbench.actionsLoading}
-            error={workbench.actionsError}
-            mutationPending={workbench.actionMutationPending}
-            onConfirm={workbench.confirmAction}
-            onDismiss={workbench.dismissAction}
-            onRetry={workbench.retryActions}
-          />
-          <Link to="/aktionen" className="block text-right text-xs font-medium text-primary underline-offset-4 hover:underline">
-            Alle Aktionen öffnen
-          </Link>
-        </div>
-      </div>
+      <QueueWorkspace compact />
     </div>
   )
 }

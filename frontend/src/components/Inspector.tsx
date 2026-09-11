@@ -1,32 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { EvidenceChips } from '@/components/EvidenceChips'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ruleLabel, severityBadgeVariant, severityLabel, statusLabel, timelineLabel } from '@/lib/labels'
-import { cn } from '@/lib/utils'
-import type { ExplainResult, Finding, Timeline } from '../types'
-
-type DraftKind = 'calendar' | 'email' | 'board' | 'override' | 'watch'
+import type { Finding, Timeline } from '../types'
 
 type InspectorProps = {
   selected: Finding | null
   loading?: boolean
   timeline: Timeline | undefined
-  explainPending: boolean
   reviewPending: boolean
   reviewClosed: boolean
   reviewError: boolean
   reviewSuccess: boolean
-  explainResult: ExplainResult | undefined
-  highlightedEvidenceId: string | null
   showBackLink?: boolean
-  onExplain: () => void
   onApprove: () => void
   onDismiss: () => void
-  onEvidenceHighlight: (id: string) => void
-  onDraftAction?: (kind: DraftKind) => void
 }
 
 function formatTimelineValue(value: string | null) {
@@ -51,19 +41,13 @@ export function Inspector({
   selected,
   loading = false,
   timeline,
-  explainPending,
   reviewPending,
   reviewClosed,
   reviewError,
   reviewSuccess,
-  explainResult,
-  highlightedEvidenceId,
   showBackLink = false,
-  onExplain,
   onApprove,
   onDismiss,
-  onEvidenceHighlight,
-  onDraftAction,
 }: InspectorProps) {
   const [armedAction, setArmedAction] = useState<'approve' | 'dismiss' | null>(null)
 
@@ -131,14 +115,6 @@ export function Inspector({
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  size="sm"
-                  onClick={onExplain}
-                  disabled={explainPending}
-                >
-                  {explainPending ? 'Erkläre…' : 'KI erklären'}
-                </Button>
-                <Button
-                  type="button"
                   variant="outline"
                   size="sm"
                   onClick={handleApprove}
@@ -161,32 +137,6 @@ export function Inspector({
                 </Button>
               </div>
 
-              {onDraftAction && (
-                <div className="mt-5 border-t border-border pt-4">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Aktion vorbereiten
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('calendar')}>
-                    Kalender
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('email')}>
-                    Mail
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('board')}>
-                    Karte
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('override')}>
-                    Override
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => onDraftAction('watch')}>
-                    Watch
-                  </Button>
-                  </div>
-                  <p className="mt-2 text-[11px] text-muted-foreground">Entwürfe werden erst in der Aktionsqueue freigegeben.</p>
-                </div>
-              )}
-
               {reviewError && (
                 <p className="text-sm text-[var(--warn)]">
                   Prüfung konnte nicht gespeichert werden. Läuft die API?
@@ -198,31 +148,6 @@ export function Inspector({
                 </p>
               )}
 
-              {explainResult && (
-                <div className="mt-5 border-l-2 border-primary bg-[var(--surface-subtle)] px-4 py-3">
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      KI-Erklärung
-                    </p>
-                    <p className="text-sm">{explainResult.explanation.summary}</p>
-                    {explainResult.explanation.proposed_next_action && (
-                      <p className="text-sm">
-                        <strong>Nächster Schritt:</strong>{' '}
-                        {explainResult.explanation.proposed_next_action}
-                      </p>
-                    )}
-                    <EvidenceChips
-                      ids={explainResult.explanation.evidence_ids}
-                      onSelect={onEvidenceHighlight}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Kategorie={explainResult.explanation.blocker_category ?? 'k. A.'} ·
-                      Konfidenz={explainResult.explanation.confidence} ·
-                      Enthaltung={String(explainResult.explanation.abstained)}
-                    </p>
-                  </div>
-                </div>
-              )}
             </section>
 
             {Object.keys(selected.facts).length > 0 && (
@@ -238,29 +163,6 @@ export function Inspector({
                   </dl>
               </section>
             )}
-
-            <section className="border-t border-border px-5 py-5">
-                <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Quellzellen</h2>
-                <ul className="mt-3 divide-y divide-border border-y border-border text-sm">
-                  {selected.evidence.map((e) => (
-                    <li
-                      key={e.evidence_id}
-                      id={`evidence-${e.evidence_id}`}
-                      className={cn(
-                        'border border-transparent px-2 py-2.5 font-mono text-xs transition-colors',
-                        highlightedEvidenceId === e.evidence_id &&
-                          'border-primary bg-accent/80',
-                      )}
-                    >
-                      <code className="text-primary">{e.evidence_id}</code>{' '}
-                      {e.file} / {e.sheet} r{e.row} · {e.column}
-                      {e.value != null && (
-                        <span className="text-muted-foreground"> = {e.value}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-            </section>
 
             {timeline && (
               <section className="border-t border-border px-5 py-5">

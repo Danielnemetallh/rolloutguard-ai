@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 
 type LayoutProps = {
-  header: ReactNode
   navigation: ReactNode
   agent: ReactNode
   navigationCollapsed: boolean
@@ -10,7 +9,6 @@ type LayoutProps = {
 }
 
 export function Layout({
-  header,
   navigation,
   agent,
   navigationCollapsed,
@@ -25,14 +23,15 @@ export function Layout({
         {navigation}
       </aside>
       <div className="workbench-canvas">
-        <div className="workbench-commandbar">
-          {header}
-        </div>
         <main className="workbench-main">{children}</main>
       </div>
-      <aside id="evidence-agent" className="workbench-agent" aria-label="Evidenz-Copilot">
-        {agent}
-      </aside>
+      {agentCollapsed ? (
+        <div id="evidence-agent">{agent}</div>
+      ) : (
+        <aside id="evidence-agent" className="workbench-agent" aria-label="Evidenz-Copilot">
+          {agent}
+        </aside>
+      )}
     </div>
   )
 }

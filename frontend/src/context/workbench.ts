@@ -1,6 +1,8 @@
 import { createContext, useContext } from 'react'
+import type { AgentViewportContext } from '@/hooks/useAgentViewportContext'
 import type {
   AgentResult,
+  AgentSessionSummary,
   AgentTurn,
   Diff,
   ExplainResult,
@@ -63,7 +65,15 @@ export type WorkbenchContextValue = {
   askError: boolean
   askResult: AgentResult | undefined
   history: AgentTurn[]
-  retryQuestion: (turnId: string) => void
+  retryQuestion: (turnId: string, viewport?: AgentViewportContext) => void
+  startNewAgentSession: () => void
+  loadAgentHistory: () => void
+  resumeAgentSession: (sessionId: string) => void
+  deleteAgentSession: (sessionId: string) => void
+  renameAgentSession: (sessionId: string, title: string) => void
+  closeAgentHistory: () => void
+  agentHistoryOpen: boolean
+  savedAgentSessions: AgentSessionSummary[]
   explainPending: boolean
   reviewPending: boolean
   reviewError: boolean
@@ -89,7 +99,7 @@ export type WorkbenchContextValue = {
   onToggleSort: (key: SortKey) => void
   matchHeroFinding: (hero: HeroFinding) => Finding | undefined
   questionChange: (value: string) => void
-  submitQuestion: (override?: string) => void
+  submitQuestion: (override?: string, viewport?: AgentViewportContext) => void
   highlightEvidence: (id: string) => void
   explainFinding: (id: number) => void
   approveFinding: (id: number) => void

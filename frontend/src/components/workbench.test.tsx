@@ -8,8 +8,9 @@ import { CitationList } from '@/components/CitationList'
 import { NavigationSidebar } from '@/components/NavigationSidebar'
 import { SelectedFindingTimeline } from '@/components/SelectedFindingTimeline'
 import { useStoredBoolean } from '@/hooks/useStoredBoolean'
+import { findingIdFromLocation, pageLabelFromPathname, visibleFindingsForPage } from '@/hooks/useAgentViewportContext'
 import { useAgentAsk } from '@/hooks/useAgentAsk'
-import type { AgentTurn, Finding } from '@/types'
+import type { AgentTurn, Finding, ProposedAction } from '@/types'
 
 const finding: Finding = {
   id: 17,
@@ -49,6 +50,7 @@ describe('workbench shell behavior', () => {
     )
     expect(screen.getByRole('link', { name: 'Ausnahmen' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: 'Navigation ausklappen' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Aktionen' })).not.toBeInTheDocument()
   })
 })
 
@@ -98,6 +100,27 @@ describe('agent sidebar', () => {
     )
   })
 
+  it('renders only a floating launcher when collapsed', () => {
+    render(
+      <AgentSidebar
+        collapsed
+        analysisId={4}
+        draft=""
+        turns={[]}
+        actions={[]}
+        onToggle={vi.fn()}
+        onNewSession={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRetry={vi.fn()}
+        onConfirmAction={vi.fn()}
+        onEvidenceSelect={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Evidenz-Copilot öffnen' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Agent-Unterhaltung' })).not.toBeInTheDocument()
+  })
+
   it('shows the pending response beneath the submitted user message', () => {
     render(
       <AgentSidebar
@@ -117,6 +140,131 @@ describe('agent sidebar', () => {
     expect(screen.getByText('Antwort wird erstellt')).toBeInTheDocument()
   })
 
+  it('hides the empty-state and composer while session history is open', () => {
+    render(
+      <AgentSidebar
+        collapsed={false}
+        analysisId={4}
+        draft=""
+        turns={[]}
+        actions={[]}
+        historyOpen
+        savedSessions={[
+          {
+            session_id: '11111111-1111-4111-8111-111111111111',
+            analysis_run_id: 4,
+            preview: 'Was steht im Vertrag?',
+            turn_count: 2,
+            created_at: null,
+            updated_at: null,
+          },
+        ]}
+        onToggle={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRetry={vi.fn()}
+        onConfirmAction={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText('Gespeicherte Sitzungen')).toBeInTheDocument()
+    expect(screen.queryByText(/Fragen Sie nach Befunden/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Frage an den Evidenz-Copiloten')).not.toBeInTheDocument()
+  })
+
+  it('renames and confirms before deleting a saved session', async () => {
+    const user = userEvent.setup()
+    const onRename = vi.fn()
+    const onDelete = vi.fn()
+    render(
+      <AgentSidebar
+        collapsed={false}
+        analysisId={4}
+        draft=""
+        turns={[]}
+        actions={[]}
+        historyOpen
+        savedSessions={[
+          {
+            session_id: '11111111-1111-4111-8111-111111111111',
+            analysis_run_id: 4,
+            preview: 'Alte Sitzung',
+            turn_count: 1,
+            created_at: null,
+            updated_at: null,
+          },
+        ]}
+        onToggle={vi.fn()}
+        onRenameSession={onRename}
+        onDeleteSession={onDelete}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRetry={vi.fn()}
+        onConfirmAction={vi.fn()}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Sitzung umbenennen' }))
+    await user.clear(screen.getByRole('textbox', { name: 'Sitzung umbenennen' }))
+    await user.type(screen.getByRole('textbox', { name: 'Sitzung umbenennen' }), 'Neuer Titel')
+    await user.keyboard('{Enter}')
+    expect(onRename).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 'Neuer Titel')
+
+    await user.click(screen.getByRole('button', { name: 'Sitzung löschen' }))
+    expect(onDelete).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Löschen?' }))
+    expect(onDelete).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111')
+  })
+
+  it('labels the paperclip as corpus ingest, not a chat attachment', () => {
+    render(
+      <AgentSidebar
+        collapsed={false}
+        analysisId={4}
+        draft=""
+        turns={[]}
+        actions={[]}
+        projectId={1}
+        onUploadDocument={vi.fn()}
+        onToggle={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRetry={vi.fn()}
+        onConfirmAction={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Dokument in den Korpus aufnehmen' })).toBeInTheDocument()
+  })
+
+  it('asks for permission in the sidebar instead of a separate queue page', () => {
+    const draftAction: ProposedAction = {
+      id: 9,
+      action_type: 'email',
+      status: 'draft',
+      payload: { subject: 'SLA-Risiko DE-NRW-0107', composio_tool: 'GMAIL_CREATE_EMAIL_DRAFT' },
+      site_ids: ['DE-NRW-0107'],
+      evidence_ids: [],
+      result: {},
+      created_at: null,
+    }
+    render(
+      <AgentSidebar
+        collapsed={false}
+        analysisId={4}
+        draft=""
+        turns={[completeTurn]}
+        actions={[draftAction]}
+        onToggle={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRetry={vi.fn()}
+        onConfirmAction={vi.fn()}
+        onDismissAction={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('dialog', { name: 'Freigabe erforderlich' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Erlauben' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ablehnen' })).toBeInTheDocument()
+  })
+
   it('keeps drafts and transcripts separated by analysis run', async () => {
     const responseResult = completeTurn.result!
     vi.stubGlobal(
@@ -129,14 +277,36 @@ describe('agent sidebar', () => {
     )
 
     act(() => result.current.questionChange('Welche Quelle belegt das?'))
-    act(() => result.current.submitQuestion())
+    act(() =>
+      result.current.submitQuestion('Was siehst du?', {
+        label: 'FRS-001 · DE-BE-0011',
+        page: 'befund',
+        findingId: 19,
+        kpis: { findings_critical: 3 },
+        selectedFinding: {
+          id: 19,
+          site_id: 'DE-BE-0011',
+          rule_id: 'FRS-001',
+          severity: 'warning',
+          status: 'open',
+          message: 'Source record is 51 days old (threshold 30).',
+          facts: { age_days: 51 },
+          evidence_count: 6,
+        },
+        visibleFindings: [],
+        pendingDraftCount: 0,
+      }),
+    )
     expect(result.current.question).toBe('')
     expect(result.current.history[0]).toMatchObject({
       analysisRunId: 4,
-      question: 'Welche Quelle belegt das?',
+      question: 'Was siehst du?',
       status: 'pending',
     })
     await waitFor(() => expect(result.current.history[0].status).toBe('complete'))
+    const payload = JSON.parse(String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body))
+    expect(payload.viewport.finding_id).toBe(19)
+    expect(payload.viewport.selected_finding.site_id).toBe('DE-BE-0011')
 
     rerender({ analysisId: 5 })
     expect(result.current.history).toEqual([])
@@ -146,6 +316,16 @@ describe('agent sidebar', () => {
     rerender({ analysisId: 4 })
     expect(result.current.history).toHaveLength(1)
     expect(result.current.question).toBe('')
+    vi.unstubAllGlobals()
+  })
+
+  it('does not invent a session id when creating a session fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, text: async () => 'down' }))
+    const { result } = renderHook(() => useAgentAsk(4))
+    const existing = result.current.sessionId
+    act(() => result.current.startNewSession())
+    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
+    expect(result.current.sessionId).toBe(existing)
     vi.unstubAllGlobals()
   })
 })
@@ -234,5 +414,25 @@ describe('selected finding timeline', () => {
     expect(screen.getByText('Projektverlauf · DE-NRW-0107')).toBeInTheDocument()
     expect(screen.queryByText('15.09.2026')).not.toBeInTheDocument()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('agent viewport from location', () => {
+  it('reads the open Inspektor finding from /befund/:id, not from route params', () => {
+    expect(findingIdFromLocation('/befund/11', null)).toBe(11)
+    expect(findingIdFromLocation('/befund/11/', null)).toBe(11)
+    expect(findingIdFromLocation('/', '37')).toBe(37)
+    expect(findingIdFromLocation('/', null)).toBeNull()
+    expect(pageLabelFromPathname('/befund/11')).toEqual({ page: 'befund', label: 'Inspektor' })
+  })
+
+  it('caps Leitstand findings to the compact queue and copies KPIs from the run', () => {
+    const findings = Array.from({ length: 20 }, (_, index) => ({
+      ...finding,
+      id: index + 1,
+    }))
+    expect(visibleFindingsForPage('/', findings)).toHaveLength(12)
+    expect(visibleFindingsForPage('/ausnahmen', findings)).toHaveLength(20)
+    expect(pageLabelFromPathname('/aktionen')).toEqual({ page: 'aktionen', label: 'Workbench' })
   })
 })

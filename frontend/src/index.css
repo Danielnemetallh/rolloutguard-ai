@@ -146,15 +146,6 @@
   background: var(--background);
 }
 
-.workbench-commandbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in oklch, var(--surface-raised) 96%, transparent);
-  backdrop-filter: blur(10px);
-}
-
 .workbench-main {
   min-width: 0;
   padding: 24px;
@@ -168,13 +159,47 @@
   box-shadow: var(--shadow-overlay);
 }
 
-.agent-collapsed .workbench-agent {
-  width: 48px;
-  box-shadow: none;
+#evidence-agent:not(.workbench-agent) {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: visible;
 }
 
-.agent-collapsed .workbench-canvas {
-  margin-right: 48px;
+.agent-launcher {
+  position: fixed;
+  right: 16px;
+  bottom: 24px;
+  z-index: 50;
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-overlay);
+  transition: background-color 150ms ease;
+}
+
+.agent-launcher:hover {
+  background: var(--muted);
+}
+
+.agent-launcher:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--ring) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.agent-launcher-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--warning);
 }
 
 .queue-workspace {
@@ -282,11 +307,6 @@
     box-shadow: var(--shadow-overlay);
   }
 
-  .agent-collapsed .workbench-agent {
-    width: 48px;
-    box-shadow: none;
-  }
-
   .workbench-main {
     padding: 20px;
   }
@@ -312,11 +332,11 @@
   }
 
   .workbench-shell.agent-collapsed {
-    grid-template-columns: 216px minmax(0, 1fr) 48px;
+    grid-template-columns: 216px minmax(0, 1fr);
   }
 
   .workbench-shell.navigation-collapsed.agent-collapsed {
-    grid-template-columns: 64px minmax(0, 1fr) 48px;
+    grid-template-columns: 64px minmax(0, 1fr);
   }
 
   .workbench-agent {
@@ -326,9 +346,6 @@
     box-shadow: none;
   }
 
-  .agent-collapsed .workbench-canvas {
-    margin-right: 0;
-  }
 }
 
 @media (min-width: 1900px) {
@@ -346,9 +363,6 @@
     max-width: calc(100vw - 64px);
   }
 
-  .agent-collapsed .workbench-agent {
-    width: 48px;
-  }
 }
 
 @media (max-width: 500px) {

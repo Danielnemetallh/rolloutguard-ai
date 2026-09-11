@@ -77,6 +77,7 @@ export type ExplainResult = {
 
 export type AgentResult = {
   provider: string
+  session_id?: string
   result: {
     answer: string
     site_ids: string[]
@@ -106,6 +107,28 @@ export type AgentTurn = {
   question: string
   status: 'pending' | 'complete' | 'error'
   result?: AgentResult
+}
+
+export type AgentSessionSummary = {
+  session_id: string
+  analysis_run_id: number
+  preview: string
+  turn_count: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type AgentSessionMessage = {
+  id: number
+  role: string
+  content: string
+  tool_trace?: string[]
+  citations?: Record<string, unknown>
+  created_at: string | null
+}
+
+export type AgentSessionDetail = AgentSessionSummary & {
+  messages: AgentSessionMessage[]
 }
 
 export type ProposedAction = {

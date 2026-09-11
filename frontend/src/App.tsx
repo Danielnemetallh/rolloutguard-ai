@@ -3,11 +3,10 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AgentSidebar } from './components/AgentSidebar'
 import { Layout } from './components/Layout'
 import { NavigationSidebar } from './components/NavigationSidebar'
-import { TopBar } from './components/TopBar'
 import { WorkbenchProvider } from './context/WorkbenchContext'
 import { useWorkbench } from './context/workbench'
+import { useAgentViewportContext } from './hooks/useAgentViewportContext'
 import { useStoredBoolean } from './hooks/useStoredBoolean'
-import { ActionsPage } from './pages/ActionsPage'
 import { DocumentsPage } from './pages/DocumentsPage'
 import { ExceptionsPage } from './pages/ExceptionsPage'
 import { FindingPage } from './pages/FindingPage'
@@ -18,6 +17,7 @@ const queryClient = new QueryClient()
 
 function Shell() {
   const wb = useWorkbench()
+  const viewport = useAgentViewportContext()
   const [navigationCollapsed, setNavigationCollapsed] = useStoredBoolean(
     'rolloutguard.sidebar.navigation.collapsed',
     false,
@@ -34,25 +34,7 @@ function Shell() {
       navigation={
         <NavigationSidebar
           collapsed={navigationCollapsed}
-          pendingActionCount={wb.pendingActionCount}
           onToggle={() => setNavigationCollapsed((value) => !value)}
-        />
-      }
-      header={
-        <TopBar
-          isLoading={wb.isLoading}
-          error={wb.error}
-          analysisId={wb.analysisId}
-          projectId={wb.projectId}
-          analyzePending={wb.analyzePending}
-          exportPending={wb.exportPending}
-          uploadPending={wb.uploadPending}
-          documentsCount={wb.documents.length}
-          integrations={wb.integrations}
-          onAnalyze={wb.onAnalyze}
-          onExport={wb.onExport}
-          onUploadDocument={wb.onUploadDocument}
-          onConnect={wb.onConnect}
         />
       }
       agent={
@@ -63,10 +45,24 @@ function Shell() {
           turns={wb.history}
           actions={wb.actions}
           onToggle={() => setAgentCollapsed((value) => !value)}
+          onNewSession={wb.startNewAgentSession}
+          onShowHistory={wb.loadAgentHistory}
+          historyOpen={wb.agentHistoryOpen}
+          savedSessions={wb.savedAgentSessions}
+          onResumeSession={wb.resumeAgentSession}
+          onDeleteSession={wb.deleteAgentSession}
+          onRenameSession={wb.renameAgentSession}
+          onCloseHistory={wb.closeAgentHistory}
+          viewport={viewport}
           onDraftChange={wb.questionChange}
-          onSubmit={wb.submitQuestion}
-          onRetry={wb.retryQuestion}
+          onSubmit={(question) => wb.submitQuestion(question, viewport)}
+          onRetry={(turnId) => wb.retryQuestion(turnId, viewport)}
           onConfirmAction={wb.confirmAction}
+          onDismissAction={wb.dismissAction}
+          actionMutationPending={wb.actionMutationPending}
+          projectId={wb.projectId}
+          uploadPending={wb.uploadPending}
+          onUploadDocument={wb.onUploadDocument}
           onEvidenceSelect={wb.highlightEvidence}
         />
       }
@@ -75,7 +71,6 @@ function Shell() {
         <Route index element={<Leitstand />} />
         <Route path="ausnahmen" element={<ExceptionsPage />} />
         <Route path="dokumente" element={<DocumentsPage />} />
-        <Route path="aktionen" element={<ActionsPage />} />
         <Route path="laeufe" element={<RunsPage />} />
         <Route path="befund/:id" element={<FindingPage />} />
       </Routes>

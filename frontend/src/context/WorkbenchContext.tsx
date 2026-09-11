@@ -49,6 +49,22 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       askResult: agent.askResult,
       history: agent.history,
       retryQuestion: agent.retryQuestion,
+      startNewAgentSession: agent.startNewSession,
+      loadAgentHistory: () => {
+        void agent.loadSessionHistory()
+      },
+      resumeAgentSession: (sessionId) => {
+        void agent.resumeSession(sessionId)
+      },
+      deleteAgentSession: (sessionId) => {
+        void agent.deleteSession(sessionId)
+      },
+      renameAgentSession: (sessionId, title) => {
+        void agent.renameSession(sessionId, title)
+      },
+      closeAgentHistory: agent.closeHistory,
+      agentHistoryOpen: agent.historyOpen,
+      savedAgentSessions: agent.savedSessions,
       explainPending: actions.explainPending,
       reviewPending: actions.reviewPending,
       reviewError: actions.reviewError,
