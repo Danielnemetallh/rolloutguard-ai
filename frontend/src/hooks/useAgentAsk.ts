@@ -93,9 +93,7 @@ export function useAgentAsk(analysisId: number | null) {
                   page: viewport.page,
                   label: viewport.label,
                   finding_id: viewport.findingId,
-                  kpis: viewport.kpis,
                   selected_finding: viewport.selectedFinding,
-                  visible_findings: viewport.visibleFindings,
                   pending_draft_count: viewport.pendingDraftCount,
                 },
               }

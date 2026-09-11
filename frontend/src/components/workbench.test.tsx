@@ -8,7 +8,7 @@ import { CitationList } from '@/components/CitationList'
 import { NavigationSidebar } from '@/components/NavigationSidebar'
 import { SelectedFindingTimeline } from '@/components/SelectedFindingTimeline'
 import { useStoredBoolean } from '@/hooks/useStoredBoolean'
-import { findingIdFromLocation, pageLabelFromPathname, visibleFindingsForPage } from '@/hooks/useAgentViewportContext'
+import { findingIdFromLocation, pageLabelFromPathname } from '@/hooks/useAgentViewportContext'
 import { useAgentAsk } from '@/hooks/useAgentAsk'
 import type { AgentTurn, Finding, ProposedAction } from '@/types'
 
@@ -282,7 +282,6 @@ describe('agent sidebar', () => {
         label: 'FRS-001 · DE-BE-0011',
         page: 'befund',
         findingId: 19,
-        kpis: { findings_critical: 3 },
         selectedFinding: {
           id: 19,
           site_id: 'DE-BE-0011',
@@ -293,7 +292,6 @@ describe('agent sidebar', () => {
           facts: { age_days: 51 },
           evidence_count: 6,
         },
-        visibleFindings: [],
         pendingDraftCount: 0,
       }),
     )
@@ -424,15 +422,6 @@ describe('agent viewport from location', () => {
     expect(findingIdFromLocation('/', '37')).toBe(37)
     expect(findingIdFromLocation('/', null)).toBeNull()
     expect(pageLabelFromPathname('/befund/11')).toEqual({ page: 'befund', label: 'Inspektor' })
-  })
-
-  it('caps Leitstand findings to the compact queue and copies KPIs from the run', () => {
-    const findings = Array.from({ length: 20 }, (_, index) => ({
-      ...finding,
-      id: index + 1,
-    }))
-    expect(visibleFindingsForPage('/', findings)).toHaveLength(12)
-    expect(visibleFindingsForPage('/ausnahmen', findings)).toHaveLength(20)
-    expect(pageLabelFromPathname('/aktionen')).toEqual({ page: 'aktionen', label: 'Workbench' })
+    expect(pageLabelFromPathname('/')).toEqual({ page: 'leitstand', label: 'Leitstand' })
   })
 })

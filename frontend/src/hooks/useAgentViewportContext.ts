@@ -10,9 +10,6 @@ const PAGE_LABELS: Record<string, string> = {
   '/laeufe': 'Läufe',
 }
 
-const LEITSTAND_VISIBLE_LIMIT = 12
-const VIEWPORT_FINDINGS_LIMIT = 40
-
 export type AgentViewportFinding = {
   id: number
   site_id: string
@@ -28,9 +25,7 @@ export type AgentViewportContext = {
   label: string
   page: string
   findingId: number | null
-  kpis: Record<string, number>
   selectedFinding: AgentViewportFinding | null
-  visibleFindings: AgentViewportFinding[]
   pendingDraftCount: number
 }
 
@@ -70,11 +65,6 @@ export function snapshotFinding(finding: Finding): AgentViewportFinding {
   }
 }
 
-export function visibleFindingsForPage(pathname: string, findings: Finding[]): Finding[] {
-  const limit = pathname === '/' ? LEITSTAND_VISIBLE_LIMIT : VIEWPORT_FINDINGS_LIMIT
-  return findings.slice(0, limit)
-}
-
 export function useAgentViewportContext(): AgentViewportContext {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
@@ -100,17 +90,8 @@ export function useAgentViewportContext(): AgentViewportContext {
       label,
       page,
       findingId,
-      kpis: workbench.kpis ?? {},
       selectedFinding: finding ? snapshotFinding(finding) : null,
-      visibleFindings: visibleFindingsForPage(pathname, workbench.visibleFindings).map(snapshotFinding),
       pendingDraftCount: workbench.pendingActionCount,
     }
-  }, [
-    befundParam,
-    pathname,
-    workbench.findings,
-    workbench.kpis,
-    workbench.pendingActionCount,
-    workbench.visibleFindings,
-  ])
+  }, [befundParam, pathname, workbench.findings, workbench.pendingActionCount])
 }
