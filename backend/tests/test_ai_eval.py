@@ -6,7 +6,14 @@ from fastapi.testclient import TestClient
 
 from rolloutguard_api.ai.agent import run_agent
 from rolloutguard_api.ai.enrichment import classify_blocker, explain_finding
-from rolloutguard_api.ai.provider import MockLLMProvider, extract_json_object
+from rolloutguard_api.ai.memory import new_session_id
+from rolloutguard_api.ai.provider import (
+    MockLLMProvider,
+    extract_json_object,
+    get_llm_provider,
+    llm_mock_reason,
+)
+from rolloutguard_api.core.config import get_settings
 from rolloutguard_api.main import create_app
 
 
@@ -111,6 +118,7 @@ def _run_agent_on_synthetic(question: str):
         return run_agent(
             db,
             analysis_run_id=analysis_id,
+            session_id=new_session_id(),
             question=question,
             provider=MockLLMProvider(),
         )
@@ -166,7 +174,15 @@ def test_agent_forces_trusted_analysis_run_id() -> None:
     class WrongRunProvider(LLMProvider):
         name = "wrong-run-mock"
 
-        def complete(self, messages, *, tools=None, temperature=0.0, max_tokens=1200, thinking=False):
+        def complete(
+            self,
+            messages,
+            *,
+            tools=None,
+            temperature=0.0,
+            max_tokens=1200,
+            thinking=False,
+        ):
             return LLMResponse(
                 content="",
                 model=self.name,
@@ -196,6 +212,7 @@ def test_agent_forces_trusted_analysis_run_id() -> None:
         run_agent(
             db,
             analysis_run_id=trusted_run,
+            session_id=new_session_id(),
             question="Portfolio KPIs?",
             provider=WrongRunProvider(),
         )
@@ -205,11 +222,34 @@ def test_agent_forces_trusted_analysis_run_id() -> None:
         TOOL_IMPL["get_portfolio_kpis"] = original
 
 
-def test_agent_draft_email_checks_decisions_first() -> None:
+def test_agent_gmail_draft_asks_permission_via_hook() -> None:
     answer = _run_agent_on_synthetic(
         "Erstelle einen Briefing-Mailentwurf für NordTurm zu DE-NRW-0107."
     )
-    assert "search_decisions" in answer.tool_trace
-    assert "draft_email" in answer.tool_trace
+    assert "GMAIL_CREATE_EMAIL_DRAFT" in answer.tool_trace
     assert answer.proposed_action_ids
+
+
+def test_get_llm_provider_uses_mock_when_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    get_settings.cache_clear()
+    assert llm_mock_reason() == "llm_disabled"
+    assert get_llm_provider().name == "deterministic-mock"
+
+
+def test_get_llm_provider_uses_mock_without_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "")
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    get_settings.cache_clear()
+    assert llm_mock_reason() == "no_api_key"
+    assert get_llm_provider().name == "deterministic-mock"
+
+
+def test_get_llm_provider_uses_deepseek_when_configured(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    get_settings.cache_clear()
+    assert llm_mock_reason() is None
+    assert get_llm_provider().name == "deepseek"
 

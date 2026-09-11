@@ -115,8 +115,13 @@ def tool_get_rule_definition(db: Session, rule_id: str, **_: Any) -> dict[str, A
     return {"error": "unknown_rule", "rule_id": rule_id}
 
 
-def tool_recall_session(db: Session, analysis_run_id: int, **_: Any) -> dict[str, Any]:
-    return _truncate({"turns": recall_session(db, analysis_run_id)})
+def tool_recall_session(
+    db: Session,
+    analysis_run_id: int,
+    session_id: str | None = None,
+    **_: Any,
+) -> dict[str, Any]:
+    return _truncate({"turns": recall_session(db, analysis_run_id, session_id=session_id)})
 
 
 def tool_search_decisions(
@@ -198,77 +203,6 @@ def _draft(
     }
 
 
-def tool_draft_calendar_event(
-    db: Session,
-    analysis_run_id: int,
-    site_id: str,
-    title: str,
-    date: str,
-    milestone_kind: str = "due",
-    description: str | None = None,
-    evidence_ids: list[str] | None = None,
-    **_: Any,
-) -> dict[str, Any]:
-    key = f"{site_id}:{milestone_kind}"
-    return _draft(
-        db,
-        analysis_run_id=analysis_run_id,
-        action_type="calendar",
-        payload={
-            "site_id": site_id,
-            "title": title,
-            "date": date,
-            "milestone_kind": milestone_kind,
-            "description": description,
-        },
-        site_id=site_id,
-        evidence_ids=evidence_ids,
-        idempotency_key=key,
-    )
-
-
-def tool_draft_email(
-    db: Session,
-    analysis_run_id: int,
-    subject: str,
-    body: str,
-    site_id: str | None = None,
-    to: str | None = None,
-    evidence_ids: list[str] | None = None,
-    **_: Any,
-) -> dict[str, Any]:
-    return _draft(
-        db,
-        analysis_run_id=analysis_run_id,
-        action_type="email",
-        payload={
-            "to": to or "partner@nordturm.demo",
-            "subject": subject,
-            "body": body,
-            "site_id": site_id,
-        },
-        site_id=site_id,
-        evidence_ids=evidence_ids,
-    )
-
-
-def tool_draft_board_card(
-    db: Session,
-    analysis_run_id: int,
-    title: str,
-    body: str | None = None,
-    site_id: str | None = None,
-    **_: Any,
-) -> dict[str, Any]:
-    return _draft(
-        db,
-        analysis_run_id=analysis_run_id,
-        action_type="board",
-        payload={"title": title, "body": body, "site_id": site_id},
-        site_id=site_id,
-    )
-
-
 def tool_draft_override(
     db: Session,
     analysis_run_id: int,
@@ -312,25 +246,7 @@ def tool_draft_watch(
     )
 
 
-def tool_draft_task(
-    db: Session,
-    analysis_run_id: int,
-    title: str,
-    due: str | None = None,
-    owner: str | None = None,
-    site_id: str | None = None,
-    **_: Any,
-) -> dict[str, Any]:
-    return _draft(
-        db,
-        analysis_run_id=analysis_run_id,
-        action_type="task",
-        payload={"title": title, "due": due, "owner": owner, "site_id": site_id},
-        site_id=site_id,
-    )
-
-
-def _fn(
+def tool_fn(
     name: str,
     description: str,
     properties: dict[str, Any],
@@ -351,13 +267,13 @@ def _fn(
 
 
 TOOL_SPECS: list[dict[str, Any]] = [
-    _fn(
+    tool_fn(
         "get_portfolio_kpis",
         "Kennzahlen des Analyse-Laufs lesen.",
         {"analysis_run_id": {"type": "integer"}},
         ["analysis_run_id"],
     ),
-    _fn(
+    tool_fn(
         "list_findings",
         "Befunde eines Laufs listen, optional nach Schwere, Regel oder Standort.",
         {
@@ -369,7 +285,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         ["analysis_run_id"],
     ),
-    _fn(
+    tool_fn(
         "get_site_timeline",
         "Timeline-Fakten und Befunde eines Standorts lesen.",
         {
@@ -378,19 +294,19 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         ["analysis_run_id", "site_id"],
     ),
-    _fn(
+    tool_fn(
         "get_rule_definition",
         "Klartext-Definition einer Regel-ID liefern.",
         {"rule_id": {"type": "string"}},
         ["rule_id"],
     ),
-    _fn(
+    tool_fn(
         "recall_session",
-        "Letzte Chat-Nachrichten dieses Analyse-Laufs erinnern.",
+        "Letzte Chat-Nachrichten dieser Sitzung erinnern.",
         {"analysis_run_id": {"type": "integer"}},
         ["analysis_run_id"],
     ),
-    _fn(
+    tool_fn(
         "search_decisions",
         "Bereits bestätigte Reviews, Aktionen und Watches suchen. Vor jedem Entwurf aufrufen.",
         {
@@ -401,7 +317,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         ["analysis_run_id"],
     ),
-    _fn(
+    tool_fn(
         "search_corpus",
         "Dokumente, Regeltexte und Befund-Chunks per Stichwort suchen. Zitiert chunk_id.",
         {
@@ -410,7 +326,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         ["analysis_run_id", "query"],
     ),
-    _fn(
+    tool_fn(
         "get_site_summary",
         "Kurze deutsche Standortzusammenfassung lesen.",
         {
@@ -419,13 +335,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         ["analysis_run_id", "site_id"],
     ),
-    _fn(
+    tool_fn(
         "list_documents",
         "Hochgeladene PDFs und Texte des Projekts listen.",
         {"analysis_run_id": {"type": "integer"}},
         ["analysis_run_id"],
     ),
-    _fn(
+    tool_fn(
         "extract_document",
         "Gespeicherten Dokumenttext und strukturierte Vorschläge lesen.",
         {
@@ -434,43 +350,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         ["analysis_run_id", "document_id"],
     ),
-    _fn(
-        "draft_calendar_event",
-        "Kalenderentwurf anlegen (kein Google-Aufruf). Freigeben erstellt den Termin.",
-        {
-            "analysis_run_id": {"type": "integer"},
-            "site_id": {"type": "string"},
-            "title": {"type": "string"},
-            "date": {"type": "string"},
-            "milestone_kind": {"type": "string"},
-            "description": {"type": "string"},
-        },
-        ["analysis_run_id", "site_id", "title", "date"],
-    ),
-    _fn(
-        "draft_email",
-        "E-Mail-Entwurf in der Aktionsqueue anlegen. Freigeben erzeugt einen Gmail-Draft.",
-        {
-            "analysis_run_id": {"type": "integer"},
-            "subject": {"type": "string"},
-            "body": {"type": "string"},
-            "site_id": {"type": "string"},
-            "to": {"type": "string"},
-        },
-        ["analysis_run_id", "subject", "body"],
-    ),
-    _fn(
-        "draft_board_card",
-        "Notion-/Board-Karte als Entwurf anlegen.",
-        {
-            "analysis_run_id": {"type": "integer"},
-            "title": {"type": "string"},
-            "body": {"type": "string"},
-            "site_id": {"type": "string"},
-        },
-        ["analysis_run_id", "title"],
-    ),
-    _fn(
+    tool_fn(
         "draft_override",
         "Meilenstein-Override als Entwurf anlegen. Ändert Excel nicht.",
         {
@@ -482,7 +362,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
         ["analysis_run_id", "site_id", "field", "new_value"],
     ),
-    _fn(
+    tool_fn(
         "draft_watch",
         "Watch-Entwurf anlegen. Erst nach Freigeben scharf. Feuert beim nächsten Import in-app.",
         {
@@ -492,18 +372,6 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "rule_id": {"type": "string"},
         },
         ["analysis_run_id"],
-    ),
-    _fn(
-        "draft_task",
-        "Aufgabe als Entwurf anlegen (in-app und optional Notion nach Freigeben).",
-        {
-            "analysis_run_id": {"type": "integer"},
-            "title": {"type": "string"},
-            "due": {"type": "string"},
-            "owner": {"type": "string"},
-            "site_id": {"type": "string"},
-        },
-        ["analysis_run_id", "title"],
     ),
 ]
 
@@ -518,10 +386,6 @@ TOOL_IMPL: dict[str, Callable[..., dict[str, Any]]] = {
     "get_site_summary": tool_get_site_summary,
     "list_documents": tool_list_documents,
     "extract_document": tool_extract_document,
-    "draft_calendar_event": tool_draft_calendar_event,
-    "draft_email": tool_draft_email,
-    "draft_board_card": tool_draft_board_card,
     "draft_override": tool_draft_override,
     "draft_watch": tool_draft_watch,
-    "draft_task": tool_draft_task,
 }

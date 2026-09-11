@@ -61,6 +61,21 @@ def _last_tool_name(messages: list[dict[str, Any]]) -> str | None:
     return None
 
 
+def _last_tool_result(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    for msg in reversed(messages):
+        if msg.get("role") != "tool":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+    return {}
+
+
 class MockLLMProvider(LLMProvider):
     """Deterministic fixture provider for demos and CI."""
 
@@ -110,7 +125,6 @@ class MockLLMProvider(LLMProvider):
                     "mail",
                     "e-mail",
                     "briefing",
-                    "kalender",
                     "digest",
                     "watch",
                     "überwach",
@@ -127,6 +141,99 @@ class MockLLMProvider(LLMProvider):
             )
             wants_diff = "neu seit" in lowered or "letzter lauf" in lowered
 
+            if last == "get_portfolio_kpis":
+                tool_result = _last_tool_result(messages)
+                kpis = tool_result.get("kpis") if isinstance(tool_result.get("kpis"), dict) else {}
+                total_sites = kpis.get("sites_total") or kpis.get("total_sites") or "unbekannt"
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                f"Das Portfolio umfasst {total_sites} Standorte "
+                                f"(Lauf #{tool_result.get('analysis_run_id', '?')}). "
+                                f"Kritische Befunde: {kpis.get('findings_critical', '?')}."
+                            ),
+                            "site_ids": [],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["get_portfolio_kpis"],
+                            "abstained": False,
+                            "confidence": 0.82,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last == "list_findings":
+                tool_result = _last_tool_result(messages)
+                raw_findings = tool_result.get("findings")
+                findings = raw_findings if isinstance(raw_findings, list) else []
+                lines = [
+                    f"- {item.get('site_id')} ({item.get('rule_id')}, {item.get('severity')}): "
+                    f"{item.get('message')}"
+                    for item in findings[:3]
+                    if isinstance(item, dict)
+                ]
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "Kritische Standorte, die das nahe Integrationsziel gefährden:\n"
+                                + (
+                                    "\n".join(lines)
+                                    if lines
+                                    else "- Keine kritischen Befunde gelistet."
+                                )
+                            ),
+                            "site_ids": [
+                                str(item.get("site_id"))
+                                for item in findings[:3]
+                                if isinstance(item, dict) and item.get("site_id")
+                            ],
+                            "evidence_ids": [
+                                eid
+                                for item in findings[:3]
+                                if isinstance(item, dict)
+                                for eid in item.get("evidence_ids") or []
+                                if eid
+                            ][:12],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["list_findings"],
+                            "abstained": False,
+                            "confidence": 0.78,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last == "get_site_timeline":
+                tool_result = _last_tool_result(messages)
+                site_id = str(tool_result.get("site_id") or "DE-NRW-0107")
+                raw_events = tool_result.get("events")
+                events = raw_events if isinstance(raw_events, list) else []
+                preview = (
+                    f"Erstes Ereignis: {events[0].get('label')}"
+                    if events and isinstance(events[0], dict)
+                    else "Keine Timeline-Ereignisse gefunden."
+                )
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": f"Timeline für {site_id}: {preview}",
+                            "site_ids": [site_id],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["get_site_timeline"],
+                            "abstained": False,
+                            "confidence": 0.8,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
             if last == "search_corpus":
                 return LLMResponse(
                     content=json.dumps(
@@ -147,21 +254,41 @@ class MockLLMProvider(LLMProvider):
                     model=self.name,
                     latency_ms=1,
                 )
-            if last == "draft_email":
+            if last == "GMAIL_CREATE_EMAIL_DRAFT":
                 return LLMResponse(
                     content=json.dumps(
                         {
                             "answer": (
-                                "E-Mail-Entwurf liegt in der Aktionsqueue. "
-                                "Bitte Freigeben — es wird nur ein Gmail-Draft erzeugt."
+                                "E-Mail wartet auf Freigabe in der Seitenleiste. "
+                                "Erst nach Freigeben wird Gmail über Composio aufgerufen."
                             ),
                             "site_ids": ["DE-NRW-0107"],
                             "evidence_ids": [],
                             "memory_ids": [],
                             "proposed_action_ids": [],
-                            "tool_trace": ["search_decisions", "draft_email"],
+                            "tool_trace": ["GMAIL_CREATE_EMAIL_DRAFT"],
                             "abstained": False,
                             "confidence": 0.85,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last == "GOOGLECALENDAR_LIST_EVENTS":
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "Kalender gelesen. Wenn Composio nicht verbunden ist, "
+                                "nutze ich die sichtbaren Befundtermine."
+                            ),
+                            "site_ids": [],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["GOOGLECALENDAR_LIST_EVENTS"],
+                            "abstained": False,
+                            "confidence": 0.8,
                         }
                     ),
                     model=self.name,
@@ -175,21 +302,21 @@ class MockLLMProvider(LLMProvider):
                 )
             if wants_diff and last != "search_corpus" and "search_corpus" in tool_names:
                 return _call("search_corpus", {"query": "neu SLA"}, "call_mock_diff")
-            if wants_draft and last == "search_decisions" and "draft_email" in tool_names:
+            wants_calendar = any(
+                k in lowered for k in ("kalender", "termin", "calendar", "im kalender")
+            )
+            if wants_calendar and "GOOGLECALENDAR_LIST_EVENTS" in tool_names:
+                return _call("GOOGLECALENDAR_LIST_EVENTS", {}, "call_mock_calendar_list")
+            if wants_draft and "GMAIL_CREATE_EMAIL_DRAFT" in tool_names:
                 return _call(
-                    "draft_email",
+                    "GMAIL_CREATE_EMAIL_DRAFT",
                     {
                         "site_id": "DE-NRW-0107",
+                        "recipient_email": "partner@nordturm.demo",
                         "subject": "SLA-Risiko DE-NRW-0107",
                         "body": "Kritischer SLA-Befund — Freigeben für Gmail-Entwurf.",
                     },
                     "call_mock_draft_email",
-                )
-            if wants_draft and last != "search_decisions" and "search_decisions" in tool_names:
-                return _call(
-                    "search_decisions",
-                    {"site_id": "DE-NRW-0107"},
-                    "call_mock_decisions",
                 )
             if "timeline" in lowered or "DE-NRW-0107" in text:
                 site_match = re.search(r"DE-[A-Z]+-\d+", text)
@@ -406,9 +533,23 @@ def extract_json_object(text: str) -> dict[str, Any]:
     return value
 
 
+def llm_mock_reason(*, force_mock: bool = False) -> str | None:
+    """Return why the deterministic mock is active, or None when live LLM is configured."""
+    settings = get_settings()
+    if force_mock:
+        return "force_mock"
+    if not settings.has_deepseek_api_key:
+        return "no_api_key"
+    if not settings.llm_enabled:
+        return "llm_disabled"
+    return None
+
+
 def get_llm_provider(*, force_mock: bool = False) -> LLMProvider:
     settings = get_settings()
-    if force_mock or not settings.llm_enabled or not settings.deepseek_api_key:
+    reason = llm_mock_reason(force_mock=force_mock)
+    if reason:
+        log.info("llm_using_mock", reason=reason)
         return MockLLMProvider()
     return DeepSeekProvider(
         api_key=settings.deepseek_api_key,

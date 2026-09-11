@@ -2,6 +2,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Reload repo .env before settings are cached (shell env may carry stale DEEPSEEK_*).
+_ENV_PATH = Path(__file__).resolve().parents[3] / ".env"
+if _ENV_PATH.exists():
+    load_dotenv(_ENV_PATH, override=True)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
