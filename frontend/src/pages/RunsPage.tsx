@@ -1,13 +1,15 @@
 import { RunStrip } from '@/components/RunStrip'
 import { useWorkbench } from '@/context/workbench'
+import { analysisStatusLabel } from '@/lib/labels'
 
 export function RunsPage() {
   const workbench = useWorkbench()
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.025em]">Läufe</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Historie, Vergleich und aktive Analyseauswahl.</p>
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Analyse · Verlauf</p>
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.025em]">Läufe</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Historie, Vergleich und aktive Analyseauswahl.</p>
       </header>
       <RunStrip
         kpis={workbench.kpis}
@@ -38,7 +40,7 @@ export function RunsPage() {
             {(workbench.analyses ?? []).map((analysis) => (
               <tr key={analysis.id} className={analysis.id === workbench.analysisId ? 'bg-[var(--selection)]' : ''}>
                 <td className="px-4 py-3"><button className="font-mono font-medium text-primary hover:underline" onClick={() => workbench.onSelectRun(analysis.id)}>#{analysis.id}</button></td>
-                <td className="px-4 py-3">{analysis.status}</td>
+                <td className="px-4 py-3">{analysisStatusLabel(analysis.status)}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{analysis.created_at ? new Date(analysis.created_at).toLocaleString('de-DE') : 'k. A.'}</td>
                 <td className="px-4 py-3 font-mono text-[var(--critical)]">{analysis.kpis.findings_critical ?? 0}</td>
               </tr>

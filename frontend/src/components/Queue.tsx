@@ -1,7 +1,7 @@
 import { Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { severityBadgeVariant, severityLabel } from '@/lib/labels'
+import { ruleLabel, severityBadgeVariant, severityLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import type { Finding, HeroFinding, SortKey } from '../types'
 
@@ -61,28 +61,31 @@ export function Queue({
 }: QueueProps) {
   return (
     <section
-      className="flex min-h-[360px] flex-col overflow-hidden border border-border bg-[var(--surface-raised)]"
+      className="flex min-h-[440px] flex-col overflow-hidden bg-[var(--surface-raised)]"
       aria-label="Befunde"
     >
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold">
-          Ausnahmen
-          {totalCount != null && ` (${visibleCount}/${totalCount})`}
-        </h2>
+        <div>
+          <h2 className="text-sm font-semibold">Ausnahmen</h2>
+          <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+            {totalCount != null ? `${visibleCount} von ${totalCount} Befunden` : 'Warteschlange'}
+          </p>
+        </div>
       </div>
 
       {analysisId != null && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
-          <div className="flex rounded-md border border-border p-0.5">
+        <div className="space-y-2.5 border-b border-border px-4 py-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex rounded-md bg-[var(--surface-inset)] p-0.5">
             {SEVERITY_FILTERS.map((f) => (
               <button
                 key={f.value}
                 type="button"
                 onClick={() => onSeverityChange(f.value)}
                 className={cn(
-                  'rounded-[5px] px-3 py-1.5 text-sm transition-colors active:scale-[0.98]',
+                  'rounded-[4px] px-2.5 py-1 text-xs font-medium transition-colors',
                   severity === f.value
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-[var(--surface-raised)] text-foreground shadow-[0_1px_2px_oklch(24%_0.02_250_/_10%)]'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -90,7 +93,7 @@ export function Queue({
               </button>
             ))}
           </div>
-          <div className="relative min-w-[12rem] flex-1">
+          <div className="relative min-w-[10rem] flex-1">
             <Search
               className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
               strokeWidth={2}
@@ -103,19 +106,40 @@ export function Queue({
               onChange={(e) => onSearchChange(e.target.value)}
             />
           </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground" aria-label="Sortierung">
+            <span className="mr-1">Sortieren:</span>
+            {([
+              ['severity', 'Priorität'],
+              ['site_id', 'Standort'],
+              ['rule_id', 'Regel'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onToggleSort(key)}
+                className={cn(
+                  'rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground',
+                  sortKey === key && 'font-medium text-foreground',
+                )}
+              >
+                {label}{sortIndicator(sortKey === key, sortDir)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-auto px-4 pb-4">
+      <div className="flex-1 overflow-auto">
         {loading && (
-          <div className="space-y-2 py-4" aria-label="Ausnahmen werden geladen">
+          <div className="space-y-2 p-4" aria-label="Ausnahmen werden geladen">
             {[0, 1, 2, 3].map((item) => (
               <div key={item} className="h-10 animate-pulse rounded bg-muted" />
             ))}
           </div>
         )}
         {error && (
-          <div className="flex items-center justify-between gap-3 py-6 text-sm text-[var(--critical)]">
+          <div className="flex items-center justify-between gap-3 p-4 py-6 text-sm text-[var(--critical)]">
             <span>Ausnahmen konnten nicht geladen werden.</span>
             <button
               type="button"
@@ -127,12 +151,12 @@ export function Queue({
           </div>
         )}
         {!analysisId && (
-          <p className="py-6 text-sm text-muted-foreground">
+          <p className="p-4 py-6 text-sm text-muted-foreground">
             Analyse starten, um die Ausnahme-Warteschlange zu füllen.
           </p>
         )}
         {!loading && !error && analysisId != null && !findings.length && !showHeroHints && (
-          <p className="py-6 text-sm text-muted-foreground">
+          <p className="p-4 py-6 text-sm text-muted-foreground">
             {search.trim()
               ? `Keine Befunde für „${search}".`
               : 'Keine Befunde in diesem Lauf.'}
@@ -140,7 +164,7 @@ export function Queue({
         )}
 
         {showHeroHints && heroFindings && heroFindings.length > 0 && (
-          <div className="mb-4 pt-3">
+          <div className="p-4">
             <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
               Top-Befunde dieses Laufs
             </p>
@@ -166,8 +190,8 @@ export function Queue({
         )}
 
         {!loading && !error && findings.length > 0 && (
-          <div className="overflow-hidden rounded-md border border-border">
-            <table className="w-full border-collapse text-sm">
+          <div>
+            <table className="queue-table-condensed w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className="px-3 py-2">
@@ -195,10 +219,9 @@ export function Queue({
                     tabIndex={0}
                     aria-selected={selectedId === f.id}
                     className={cn(
-                      'h-11 cursor-pointer border-b border-border transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/35',
-                      f.severity === 'critical' && 'bg-[var(--critical-bg)]/55',
+                      'cursor-pointer transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/35',
                       selectedId === f.id &&
-                        'bg-[var(--selection)] shadow-[inset_0_0_0_1px_var(--primary)]',
+                        'bg-[var(--selection)] shadow-[inset_3px_0_0_var(--primary)]',
                     )}
                     onClick={() => onSelect(f)}
                     onKeyDown={(event) => {
@@ -208,14 +231,17 @@ export function Queue({
                       }
                     }}
                   >
-                    <td className="px-3 py-2">
+                    <td>
                       <Badge variant={severityBadgeVariant(f.severity)}>
                         {severityLabel(f.severity)}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs">{f.site_id}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{f.rule_id}</td>
-                    <td className="px-3 py-2">{f.message}</td>
+                    <td className="font-mono text-[11px] text-muted-foreground">{f.site_id}</td>
+                    <td className="font-mono text-[11px] text-muted-foreground">{f.rule_id}</td>
+                    <td>
+                      <p className="font-medium text-foreground">{ruleLabel(f.rule_id)}</p>
+                      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{f.message}</p>
+                    </td>
                   </tr>
                 ))}
               </tbody>

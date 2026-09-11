@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Activity, FileUp, Play, Share } from 'lucide-react'
+import { Circle, FileUp, Play, Share } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { IntegrationStatus } from '../types'
 
@@ -51,13 +51,13 @@ export function TopBar({
         : 'Datei-Fallback'
 
   return (
-    <header className="flex min-h-16 flex-wrap items-center justify-between gap-4 px-5 xl:px-7">
+    <header className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-5 xl:px-6">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Activity className="size-4 text-[var(--success)]" />
-        <span>{analysisId ? `Lauf #${analysisId} aktiv` : 'Bereit für die erste Analyse'}</span>
+        <Circle className="size-2 fill-[var(--success)] text-[var(--success)]" />
+        <span>{analysisId ? `Lauf #${analysisId}` : 'Analyse ausstehend'}</span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         {isLoading && <span className="text-sm text-muted-foreground">Verbinde…</span>}
         {error && (
           <span className="text-sm text-[var(--warn)]">
@@ -81,6 +81,7 @@ export function TopBar({
         />
         <Button
           type="button"
+          size="sm"
           variant="outline"
           disabled={!projectId || uploadPending}
           onClick={() => fileRef.current?.click()}
@@ -88,12 +89,13 @@ export function TopBar({
           <FileUp className="size-4" /> {uploadPending ? 'Lade…' : 'Dokument'}
         </Button>
         {showConnect && (
-          <Button type="button" variant="outline" onClick={onConnect}>
+          <Button type="button" size="sm" variant="outline" onClick={onConnect}>
             Composio verbinden
           </Button>
         )}
         <Button
           type="button"
+          size="sm"
           disabled={!projectId || analyzePending}
           onClick={onAnalyze}
         >
@@ -101,6 +103,7 @@ export function TopBar({
         </Button>
         <Button
           type="button"
+          size="sm"
           variant="outline"
           disabled={!analysisId || exportPending}
           onClick={onExport}

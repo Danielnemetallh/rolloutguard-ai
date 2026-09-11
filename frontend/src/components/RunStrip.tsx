@@ -17,24 +17,24 @@ export function RunStrip({ kpis, diff, analyses, analysisId, onSelectRun }: RunS
     totalSites > 0
       ? Math.max(0, Math.round(((totalSites - atRisk) / totalSites) * 100))
       : 0
-  const metrics = [
+  const summary = [
     { label: 'Standorte', value: totalSites, tone: '' },
     { label: 'kritisch', value: critical, tone: 'text-[var(--critical)]' },
     { label: 'Warnungen', value: warnings, tone: 'text-[var(--warning)]' },
-    { label: 'im Plan', value: `${onPlanPercent} %`, tone: '' },
+    { label: 'im Plan', value: `${onPlanPercent} %`, tone: 'text-[var(--success)]' },
   ]
 
   if (!kpis) {
     if (analysisId == null) {
       return (
-        <p className="border border-border bg-[var(--surface-raised)] px-4 py-6 text-sm text-muted-foreground">
+        <p className="border-y border-border py-4 text-sm text-muted-foreground">
           Starten Sie eine Analyse, um Kennzahlen und Laufvergleiche zu sehen.
         </p>
       )
     }
     return (
       <div
-        className="h-[74px] animate-pulse border border-border bg-muted/60"
+        className="h-12 animate-pulse border-y border-border bg-muted/60"
         aria-label="Kennzahlen werden geladen"
       />
     )
@@ -43,13 +43,13 @@ export function RunStrip({ kpis, diff, analyses, analysisId, onSelectRun }: RunS
   return (
     <section
       aria-label="Lauf-Kennzahlen"
-      className="border border-border bg-[var(--surface-raised)]"
+      className="flex min-h-12 flex-wrap items-center gap-x-5 gap-y-2 border-y border-border py-2.5"
     >
-      <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 sm:divide-y-0">
-        {metrics.map((metric) => (
-          <div key={metric.label} className="flex min-h-[72px] items-baseline gap-2 px-4 py-4">
+      <div className="flex flex-1 flex-wrap items-center gap-x-5 gap-y-2">
+        {summary.map((metric) => (
+          <div key={metric.label} className="flex items-baseline gap-1.5 whitespace-nowrap">
             <strong
-              className={`font-mono text-2xl font-semibold tabular-nums ${metric.tone}`}
+              className={`font-mono text-base font-semibold tabular-nums ${metric.tone}`}
             >
               {metric.value}
             </strong>
@@ -57,7 +57,7 @@ export function RunStrip({ kpis, diff, analyses, analysisId, onSelectRun }: RunS
           </div>
         ))}
       </div>
-      <div className="flex min-h-10 flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span>
           {diff?.compared_to_run_id != null
             ? `Gegen Lauf #${diff.compared_to_run_id}: ${diff.new_count} neu, ${diff.resolved_count} erledigt, ${diff.persisting_count} unverändert`
@@ -69,7 +69,7 @@ export function RunStrip({ kpis, diff, analyses, analysisId, onSelectRun }: RunS
             <select
               value={analysisId ?? ''}
               onChange={(event) => onSelectRun(Number(event.target.value))}
-              className="h-7 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground"
+              className="h-7 rounded-md border border-input bg-[var(--surface-raised)] px-2 font-mono text-xs text-foreground"
             >
               {analyses.map((analysis) => (
                 <option key={analysis.id} value={analysis.id}>

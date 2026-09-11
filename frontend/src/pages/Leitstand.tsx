@@ -8,11 +8,12 @@ export function Leitstand() {
   const workbench = useWorkbench()
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.025em]">Leitstand</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Portfolio · Ausnahmeprüfung</p>
+          <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.025em]">Leitstand</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Priorisierte Abweichungen aus Vertrag, Terminplan und Standortstatus.
           </p>
         </div>
@@ -29,7 +30,7 @@ export function Leitstand() {
         onSelectRun={workbench.onSelectRun}
       />
 
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="dashboard-grid">
         <QueueWorkspace compact />
         <div className="space-y-3">
           <ActionsQueue
@@ -42,7 +43,7 @@ export function Leitstand() {
             onDismiss={workbench.dismissAction}
             onRetry={workbench.retryActions}
           />
-          <Link to="/aktionen" className="block text-right text-xs font-medium text-primary hover:underline">
+          <Link to="/aktionen" className="block text-right text-xs font-medium text-primary underline-offset-4 hover:underline">
             Alle Aktionen öffnen
           </Link>
         </div>

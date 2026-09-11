@@ -1,5 +1,6 @@
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { actionStatusLabel } from '@/lib/labels'
 import type { ProposedAction } from '@/types'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -87,8 +88,8 @@ export function ActionsQueue({
                   <span className="font-medium">
                     {TYPE_LABELS[action.action_type] ?? action.action_type} #{action.id}
                   </span>
-                  <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
-                    {action.status}
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {actionStatusLabel(action.status)}
                   </span>
                 </div>
                 <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -118,7 +119,7 @@ export function ActionsQueue({
           ))}
         </div>
       )}
-      <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+      <p className="border-t border-border bg-[var(--surface-subtle)] px-4 py-2 text-[11px] text-muted-foreground">
         Keine externe Aktion wird ohne Freigabe ausgeführt.
       </p>
     </section>

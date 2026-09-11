@@ -1,4 +1,4 @@
-import { Bot, CornerDownLeft, PanelRightClose, RotateCcw } from 'lucide-react'
+import { Bot, CornerDownLeft, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react'
 import { useMemo } from 'react'
 import { CitationList } from '@/components/CitationList'
 import { Button } from '@/components/ui/button'
@@ -53,18 +53,18 @@ export function AgentSidebar({
 
   if (collapsed) {
     return (
-      <div className="flex h-dvh flex-col items-center border-l border-border bg-[var(--surface-raised)] py-4">
-        <Bot className="size-5 text-primary" aria-hidden="true" />
-        {pending && <span className="mt-2 size-2 rounded-full bg-muted-foreground" aria-label="Antwort ausstehend" />}
+      <div className="flex h-dvh flex-col items-center border-l border-border bg-[var(--surface-raised)] py-3">
+        <Bot className="size-4 text-primary" aria-hidden="true" />
+        {pending && <span className="mt-2 size-1.5 rounded-full bg-[var(--warning)]" aria-label="Antwort ausstehend" />}
         <button
           type="button"
-          className="mt-4 flex flex-1 items-start rounded-md px-2 py-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/40 [writing-mode:vertical-rl]"
+          className="mt-3 flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={onToggle}
           aria-controls="evidence-agent"
           aria-expanded={false}
           aria-label="Agent öffnen"
         >
-          Agent öffnen
+          <PanelRightOpen className="size-4" />
         </button>
       </div>
     )
@@ -72,7 +72,7 @@ export function AgentSidebar({
 
   return (
     <div className="flex h-dvh min-h-0 flex-col border-l border-border bg-[var(--surface-raised)]">
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
         <span className="flex size-8 items-center justify-center rounded-md bg-[var(--selection)] text-primary">
           <Bot className="size-4" />
         </span>
@@ -84,7 +84,7 @@ export function AgentSidebar({
         </div>
         <button
           type="button"
-          className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
+          className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={onToggle}
           aria-controls="evidence-agent"
           aria-expanded={true}
@@ -109,7 +109,7 @@ export function AgentSidebar({
                     type="button"
                     disabled={!analysisId}
                     onClick={() => onSubmit(question)}
-                    className="block w-full rounded-md border border-border px-3 py-2 text-left text-xs leading-relaxed hover:bg-muted disabled:opacity-50"
+                    className="block w-full border-b border-border px-1 py-2 text-left text-xs leading-relaxed hover:text-primary disabled:opacity-50"
                   >
                     {question}
                   </button>
@@ -129,7 +129,7 @@ export function AgentSidebar({
                 <section
                   role="region"
                   aria-label="Nachricht von Sie"
-                  className="ml-auto max-w-[85%] rounded-lg bg-[var(--message-user)] px-3 py-2.5"
+                  className="ml-auto max-w-[88%] border-r-2 border-primary bg-[var(--message-user)] px-3 py-2.5"
                 >
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Sie</p>
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">{turn.question}</p>
@@ -138,7 +138,7 @@ export function AgentSidebar({
                 <section
                   role="region"
                   aria-label="Antwort von Evidenz-Copilot"
-                  className="mr-auto w-full rounded-lg border border-border bg-background px-3 py-3"
+                  className="mr-auto w-full px-1 py-2"
                 >
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Evidenz-Copilot
@@ -171,7 +171,7 @@ export function AgentSidebar({
                         <div className="mt-4 space-y-2 border-t border-border pt-3">
                           <p className="text-xs font-medium">Vorgeschlagene Aktionen</p>
                           {proposedActions.map((action) => (
-                            <div key={action.id} className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2 text-xs">
+                            <div key={action.id} className="flex items-center justify-between gap-3 border-y border-border px-1 py-2 text-xs">
                               <span className="truncate">{action.action_type} #{action.id}</span>
                               {action.status === 'draft' ? (
                                 <Button size="sm" onClick={() => onConfirmAction(action.id)}>Freigeben</Button>
@@ -223,7 +223,7 @@ export function AgentSidebar({
             maxLength={2000}
             placeholder="Frage zu diesem Analyse-Lauf"
             onChange={(event) => onDraftChange(event.target.value)}
-            className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2.5 pr-11 text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
+            className="w-full resize-none rounded-md border border-input bg-background px-3 py-2.5 pr-11 text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
           />
           <button
             type="submit"

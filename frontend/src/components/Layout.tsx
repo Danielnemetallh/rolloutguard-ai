@@ -24,11 +24,11 @@ export function Layout({
       <aside id="primary-navigation" className="workbench-navigation" aria-label="Anwendungsnavigation">
         {navigation}
       </aside>
-      <div className="min-w-0 bg-background">
-        <div className="sticky top-0 z-30 border-b border-border bg-[var(--surface-raised)]">
+      <div className="workbench-canvas">
+        <div className="workbench-commandbar">
           {header}
         </div>
-        <main className="min-w-0 px-5 py-5 xl:px-7">{children}</main>
+        <main className="workbench-main">{children}</main>
       </div>
       <aside id="evidence-agent" className="workbench-agent" aria-label="Evidenz-Copilot">
         {agent}

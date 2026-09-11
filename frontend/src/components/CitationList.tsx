@@ -24,14 +24,14 @@ export function CitationList({ citations, onEvidenceSelect }: CitationListProps)
       <p className="mb-1.5 text-xs font-medium text-muted-foreground">
         Quellen ({citations.length})
       </p>
-      <div className="divide-y divide-border rounded-md border border-border bg-[var(--surface-raised)]">
+      <div className="divide-y divide-border border-y border-border">
         {citations.map((citation) => {
           const expanded = expandedId === citation.id
           return (
             <div key={citation.id}>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/40"
+                className="flex w-full items-center gap-2 px-1 py-2 text-left text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
                 aria-expanded={expanded}
                 onClick={() => setExpandedId(expanded ? null : citation.id)}
               >
@@ -49,7 +49,7 @@ export function CitationList({ citations, onEvidenceSelect }: CitationListProps)
                 />
               </button>
               {expanded && (
-                <div className="space-y-2 border-t border-border bg-muted/35 px-3 py-2.5 text-xs">
+                <div className="space-y-2 border-t border-border bg-muted/35 px-2 py-2.5 text-xs">
                   <p className="whitespace-pre-wrap leading-relaxed text-foreground">
                     {citation.snippet ?? 'Für diese Quelle ist kein Auszug gespeichert.'}
                   </p>

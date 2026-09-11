@@ -15,8 +15,9 @@ export function DocumentsPage() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.025em]">Dokumente</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Quellen · Dokumentkorpus</p>
+          <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.025em]">Dokumente</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Verträge und Hinweise für die überprüfbare Dokumentensuche.
           </p>
         </div>
@@ -36,7 +37,7 @@ export function DocumentsPage() {
         }}
       />
       <div
-        className="flex min-h-28 items-center justify-center border border-dashed border-border bg-[var(--surface-raised)] px-5 text-center text-sm text-muted-foreground"
+        className="flex min-h-20 items-center justify-center border border-dashed border-[var(--border-strong)] bg-[var(--surface-subtle)] px-5 text-center text-sm text-muted-foreground"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault()

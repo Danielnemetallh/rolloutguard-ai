@@ -1,5 +1,6 @@
 import { ActionsQueue } from '@/components/ActionsQueue'
 import { useWorkbench } from '@/context/workbench'
+import { actionStatusLabel } from '@/lib/labels'
 
 export function ActionsPage() {
   const workbench = useWorkbench()
@@ -12,13 +13,14 @@ export function ActionsPage() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.025em]">Aktionen</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Bestätigung · Externe Aktionen</p>
+          <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.025em]">Aktionen</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Entwürfe bleiben inaktiv, bis eine Person sie ausdrücklich freigibt.
           </p>
         </div>
         <p className="font-mono text-xs text-muted-foreground">
-          {Object.entries(statusCounts).map(([status, count]) => `${count} ${status}`).join(', ') || '0 Aktionen'}
+          {Object.entries(statusCounts).map(([status, count]) => `${count} ${actionStatusLabel(status)}`).join(', ') || '0 Aktionen'}
         </p>
       </header>
       <ActionsQueue

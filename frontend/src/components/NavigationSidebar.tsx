@@ -33,17 +33,17 @@ export function NavigationSidebar({
 }: NavigationSidebarProps) {
   return (
     <div className="flex h-dvh flex-col border-r border-border bg-[var(--surface-raised)]">
-      <div className="flex h-16 items-center gap-3 border-b border-border px-5">
+      <div className="flex h-14 items-center gap-3 border-b border-border px-4">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <Mark />
         </span>
         <div className="nav-label min-w-0">
           <p className="text-sm font-semibold leading-none">RolloutGuard</p>
-          <p className="mt-1 whitespace-nowrap text-[11px] text-muted-foreground">Evidence operations</p>
+          <p className="mt-1 whitespace-nowrap text-[11px] text-muted-foreground">Rollout-Kontrolle</p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 p-3" aria-label="Hauptnavigation">
+      <nav className="flex-1 space-y-0.5 px-2 py-3" aria-label="Hauptnavigation">
         {ROUTES.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -53,10 +53,10 @@ export function NavigationSidebar({
             aria-label={label}
             className={({ isActive }) =>
               cn(
-                'flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors',
-                'focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40',
+                'flex h-9 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                 isActive
-                  ? 'bg-[var(--selection)] text-primary'
+                  ? 'bg-[var(--selection)] text-foreground'
                   : 'hover:bg-muted hover:text-foreground',
               )
             }
@@ -74,10 +74,10 @@ export function NavigationSidebar({
         ))}
       </nav>
 
-      <div className="border-t border-border p-3">
-        <div className="mb-2 flex h-9 items-center gap-3 px-3 text-xs text-muted-foreground">
+      <div className="border-t border-border p-2">
+        <div className="mb-1 flex h-9 items-center gap-3 px-3 text-xs text-muted-foreground">
           <Bot className="size-[18px] shrink-0" strokeWidth={1.8} />
-          <span className="nav-label whitespace-nowrap">Regeln bleiben deterministisch</span>
+          <span className="nav-label whitespace-nowrap">Nachvollziehbare Regeln</span>
         </div>
         <button
           type="button"
@@ -86,7 +86,7 @@ export function NavigationSidebar({
           aria-expanded={!collapsed}
           aria-label={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
           title={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
-          className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
+          className="flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           {collapsed ? (
             <PanelLeftOpen className="size-[18px] shrink-0" />

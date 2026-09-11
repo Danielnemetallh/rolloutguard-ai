@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { API_BASE } from '@/lib/api'
-import { timelineLabel } from '@/lib/labels'
+import { ruleLabel, timelineLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import type { Finding, Timeline } from '@/types'
 
@@ -42,10 +42,12 @@ export function SelectedFindingTimeline({
   const isCritical = finding.severity === 'critical'
 
   return (
-    <section className="border-x border-b border-border bg-[var(--surface-raised)]" aria-label="Ausgewählter Projektverlauf">
+    <section className="bg-[var(--surface-subtle)]" aria-label="Ausgewählter Projektverlauf">
       <header className="flex min-h-12 flex-wrap items-center gap-3 border-b border-border px-4 py-2.5">
-        <h2 className="text-sm font-semibold">Projektverlauf · {finding.site_id}</h2>
-        <Badge variant="outline" className="bg-background">Ausgewählte Ausnahme</Badge>
+        <div>
+          <h2 className="text-sm font-semibold">Projektverlauf · {finding.site_id}</h2>
+          <p className="font-mono text-[10px] text-muted-foreground">{finding.rule_id}</p>
+        </div>
         <Link
           to={`/befund/${finding.id}`}
           className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
@@ -64,7 +66,7 @@ export function SelectedFindingTimeline({
       </header>
 
       {!collapsed && (
-        <div className="p-4">
+        <div className="p-5">
           {timeline.isPending && (
             <div className="space-y-3" aria-label="Projektverlauf wird geladen">
               <div className="h-4 w-40 animate-pulse rounded bg-muted" />
@@ -80,15 +82,30 @@ export function SelectedFindingTimeline({
             </div>
           )}
           {timeline.data && (
-            <div className="space-y-4">
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={finding.severity === 'critical' ? 'critical' : 'warning'}>
+                    {finding.severity === 'critical' ? 'Kritisch' : 'Warnung'}
+                  </Badge>
+                  <h3 className="text-sm font-semibold">{ruleLabel(finding.rule_id)}</h3>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{finding.message}</p>
+              </div>
               {milestones.length > 0 ? (
-                <ol className="grid gap-px overflow-hidden rounded-md border border-border bg-border lg:grid-cols-4">
+                <ol className="border-t border-border">
                   {milestones.map(([key, value]) => {
-                    const signalsViolation = isCritical && /due|forecast|integration/.test(key)
+                    const signalsViolation = isCritical && (
+                      (finding.rule_id === 'SLA-001' && /contractual_due|forecast|actual/.test(key)) ||
+                      (finding.rule_id === 'SEQ-001' && /permit|construction/.test(key)) ||
+                      (finding.rule_id === 'SEQ-002' && /fibre_ready|integration/.test(key)) ||
+                      (finding.rule_id === 'SEQ-003' && /integration_test|acceptance/.test(key)) ||
+                      (finding.rule_id === 'DQ-001' && /forecast/.test(key))
+                    )
                     return (
-                      <li key={key} className="min-w-0 bg-background px-3 py-3">
-                        <p className="truncate text-[11px] text-muted-foreground">{timelineLabel(key)}</p>
-                        <p className={cn('mt-1 font-mono text-xs font-medium', signalsViolation && 'text-[var(--critical)]')}>
+                      <li key={key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-border py-2.5">
+                        <p className="truncate text-xs text-muted-foreground">{timelineLabel(key)}</p>
+                        <p className={cn('font-mono text-xs font-medium', signalsViolation && 'text-[var(--critical)]')}>
                           {displayValue(value)}
                         </p>
                       </li>
@@ -106,19 +123,12 @@ export function SelectedFindingTimeline({
                 </dl>
               )}
 
-              <div className="grid gap-4 lg:grid-cols-[1fr_1.3fr]">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Regelverletzung</p>
-                  <p className={cn('mt-1 text-sm leading-relaxed', isCritical && 'text-[var(--critical)]')}>
-                    {finding.rule_id}: {finding.message}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Quellkoordinaten</p>
+              <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Nachweise</p>
                   {timeline.data.evidence.length > 0 ? (
-                    <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-muted-foreground">
+                    <ul className="mt-2 divide-y divide-border border-y border-border font-mono text-[11px] text-muted-foreground">
                       {timeline.data.evidence.slice(0, 6).map((evidence) => (
-                        <li key={evidence.evidence_id}>
+                        <li key={evidence.evidence_id} className="py-2">
                           {evidence.file}, {evidence.sheet} r{evidence.row}, {evidence.column}
                         </li>
                       ))}
@@ -126,7 +136,6 @@ export function SelectedFindingTimeline({
                   ) : (
                     <p className="mt-1 text-xs text-muted-foreground">Keine Quellkoordinaten verfügbar.</p>
                   )}
-                </div>
               </div>
             </div>
           )}
