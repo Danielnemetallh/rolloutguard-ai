@@ -93,10 +93,14 @@ def test_integrations_status_connected_when_session_live(monkeypatch) -> None:
     monkeypatch.setenv("COMPOSIO_API_KEY", "test-key")
     monkeypatch.setattr(
         composio_executor,
-        "_get_or_create_session",
+        "_composio_client",
         lambda: object(),
     )
-    monkeypatch.setattr(composio_executor, "_probe_oauth_needed", lambda _s: False)
+    monkeypatch.setattr(
+        composio_executor,
+        "_active_toolkits",
+        lambda: {"gmail", "googlecalendar", "notion"},
+    )
     client = TestClient(create_app())
     status = client.get("/api/integrations/status").json()
     assert status["connected"] is True
@@ -118,10 +122,17 @@ def test_integrations_status_not_connected_with_key_but_no_session(monkeypatch) 
     def fail_session():
         raise RuntimeError("auth")
 
-    monkeypatch.setattr(composio_executor, "_get_or_create_session", fail_session)
+    monkeypatch.setattr(composio_executor, "_composio_client", fail_session)
     client = TestClient(create_app())
     status = client.get("/api/integrations/status").json()
     assert status["connected"] is False
     assert status["session_ready"] is False
     composio_executor._session_cache.clear()
     get_settings.cache_clear()
+
+
+def test_connect_key_uses_consumer_header() -> None:
+    from rolloutguard_api.integrations.composio_executor import _auth_headers_for_key
+
+    assert _auth_headers_for_key("ck_example") == {"x-consumer-api-key": "ck_example"}
+    assert _auth_headers_for_key("ak_example") == {"x-api-key": "ak_example"}

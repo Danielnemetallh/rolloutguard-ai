@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from rolloutguard_api.ai.agent import run_agent
 from rolloutguard_api.ai.citations import resolve_agent_citations
+from rolloutguard_api.ai.memory import new_session_id
 from rolloutguard_api.ai.provider import LLMProvider, LLMResponse
 from rolloutguard_api.db import models
 from rolloutguard_api.main import create_app
@@ -174,6 +175,7 @@ def test_run_agent_returns_and_persists_normalized_citations() -> None:
         answer = run_agent(
             db,
             analysis_run_id=analysis_id,
+            session_id=new_session_id(),
             question="Which source supports this?",
             provider=CitationProvider(),
         )

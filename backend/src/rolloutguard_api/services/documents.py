@@ -63,7 +63,7 @@ def _suggest_structure(text_value: str, provider: LLMProvider | None) -> dict[st
         "obligations": [],
     }
     settings = get_settings()
-    if not settings.llm_enabled:
+    if not settings.live_llm_configured:
         return fallback
     llm = provider or get_llm_provider()
     if llm.name == "deterministic-mock":
