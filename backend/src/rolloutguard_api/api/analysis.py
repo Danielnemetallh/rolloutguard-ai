@@ -53,7 +53,7 @@ def analyze_synthetic(project_id: int, db: Session = Depends(get_db)) -> dict[st
         if not p.exists():
             raise AppError(
                 "SYNTHETIC_MISSING",
-                "Synthetic workbooks not found. Run scripts/generate-synthetic.ps1",
+                "Synthetische Arbeitsmappen fehlen. scripts/generate-synthetic.ps1 ausführen.",
                 status_code=404,
                 details={"path": str(p)},
             )
@@ -83,7 +83,7 @@ def analyze_synthetic(project_id: int, db: Session = Depends(get_db)) -> dict[st
 @router.get("/projects/{project_id}/analyses")
 def list_analyses(project_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     if db.get(models.Project, project_id) is None:
-        raise AppError("PROJECT_NOT_FOUND", "Project not found", status_code=404)
+        raise AppError("PROJECT_NOT_FOUND", "Projekt nicht gefunden", status_code=404)
     runs = list_analysis_runs(db, project_id)
     return {
         "project_id": project_id,
@@ -106,7 +106,11 @@ def get_analysis_diff(analysis_id: int, db: Session = Depends(get_db)) -> dict[s
     try:
         return diff_against_previous(db, analysis_id)
     except ValueError as exc:
-        raise AppError("ANALYSIS_NOT_FOUND", "Analysis run not found", status_code=404) from exc
+        raise AppError(
+            "ANALYSIS_NOT_FOUND",
+            "Analyse-Lauf nicht gefunden",
+            status_code=404,
+        ) from exc
 
 
 @router.post("/projects/{project_id}/imports")
@@ -119,7 +123,7 @@ async def upload_imports(
 ) -> dict[str, Any]:
     ensure_demo_project(db)
     if db.get(models.Project, project_id) is None:
-        raise AppError("PROJECT_NOT_FOUND", "Project not found", status_code=404)
+        raise AppError("PROJECT_NOT_FOUND", "Projekt nicht gefunden", status_code=404)
 
     settings = get_settings()
     upload_root = Path(settings.upload_dir) / "incoming"
@@ -128,7 +132,11 @@ async def upload_imports(
     async def _save(upload: UploadFile, name: str) -> Path:
         suffix = Path(upload.filename or name).suffix.lower()
         if suffix != ".xlsx":
-            raise AppError("UNSUPPORTED_FILE_TYPE", "Only .xlsx allowed", details={"file": name})
+            raise AppError(
+                "UNSUPPORTED_FILE_TYPE",
+                "Nur .xlsx-Dateien sind für Vertrag, Terminplan und Status erlaubt.",
+                details={"file": name},
+            )
         dest = upload_root / name
         content = await upload.read()
         dest.write_bytes(content)
@@ -156,7 +164,7 @@ async def upload_imports(
 def get_analysis(analysis_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     run = db.get(models.AnalysisRun, analysis_id)
     if not run:
-        raise AppError("ANALYSIS_NOT_FOUND", "Analysis run not found", status_code=404)
+        raise AppError("ANALYSIS_NOT_FOUND", "Analyse-Lauf nicht gefunden", status_code=404)
     return {
         "id": run.id,
         "batch_id": run.batch_id,
@@ -178,7 +186,7 @@ def list_findings(
 ) -> dict[str, Any]:
     run = db.get(models.AnalysisRun, analysis_id)
     if not run:
-        raise AppError("ANALYSIS_NOT_FOUND", "Analysis run not found", status_code=404)
+        raise AppError("ANALYSIS_NOT_FOUND", "Analyse-Lauf nicht gefunden", status_code=404)
     items = findings_to_dicts(
         analysis_id,
         db,
@@ -205,7 +213,7 @@ def site_timeline(
         "status": synth / "site_project_status.xlsx",
     }
     if not all(p.exists() for p in paths.values()):
-        raise AppError("SYNTHETIC_MISSING", "Synthetic data missing", status_code=404)
+        raise AppError("SYNTHETIC_MISSING", "Synthetische Daten fehlen", status_code=404)
 
     results = {k: profile_workbook(p) for k, p in paths.items()}
     sites = reconcile(results["contract"], results["schedule"], results["status"])
@@ -213,7 +221,7 @@ def site_timeline(
     if not site:
         raise AppError(
             "SITE_NOT_FOUND",
-            "Site not found",
+            "Standort nicht gefunden",
             status_code=404,
             details={"site_id": site_id},
         )
@@ -269,7 +277,7 @@ def review_finding(
 ) -> dict[str, Any]:
     finding = db.get(models.FindingRow, finding_id)
     if not finding:
-        raise AppError("FINDING_NOT_FOUND", "Finding not found", status_code=404)
+        raise AppError("FINDING_NOT_FOUND", "Befund nicht gefunden", status_code=404)
     settings = get_settings()
     decision = models.ReviewDecision(
         finding_id=finding.id,
@@ -283,6 +291,15 @@ def review_finding(
         "assign": "assigned",
     }[body.decision]
     db.add(decision)
+    from rolloutguard_api.ai.memory import record_decision
+
+    record_decision(
+        db,
+        kind="review",
+        site_id=finding.site_id,
+        rule_id=finding.rule_id,
+        payload={"finding_id": finding.id, "decision": body.decision},
+    )
     db.commit()
     return {
         "finding_id": finding.id,
@@ -297,7 +314,7 @@ def create_export(analysis_id: int, db: Session = Depends(get_db)) -> dict[str, 
     settings = get_settings()
     run = db.get(models.AnalysisRun, analysis_id)
     if not run:
-        raise AppError("ANALYSIS_NOT_FOUND", "Analysis run not found", status_code=404)
+        raise AppError("ANALYSIS_NOT_FOUND", "Analyse-Lauf nicht gefunden", status_code=404)
     out_dir = Path(settings.upload_dir) / "exports"
     try:
         result = export_analysis(

@@ -57,11 +57,11 @@ export function useAnalysisSession() {
     onSuccess: (data) => {
       setAnalysisId(data.analysis_run_id)
       setHeroFindings(data.hero_findings)
-      toast.success(`Analyse abgeschlossen — Lauf #${data.analysis_run_id}`)
+      toast.success(`Analyse abgeschlossen: Lauf #${data.analysis_run_id}`)
       void qc.invalidateQueries({ queryKey: ['findings'] })
       void qc.invalidateQueries({ queryKey: ['analyses'] })
     },
-    onError: () => toast.error('Analyse fehlgeschlagen — läuft die API?'),
+    onError: () => toast.error('Analyse fehlgeschlagen. Läuft die API?'),
   })
 
   const exportRun = useMutation({
@@ -111,11 +111,14 @@ export function useAnalysisSession() {
     kpis,
     diff: diff.data,
     analyses: analyses.data?.analyses,
+    analysesLoading: analyses.isPending,
+    analysesError: analyses.isError,
     heroFindings,
     onAnalyze: (onSuccess?: () => void) => {
       if (!projectId) return
       analyze.mutate(projectId, { onSuccess: () => onSuccess?.() })
     },
     onExport: () => analysisId && exportRun.mutate(analysisId),
+    retryAnalyses: () => void analyses.refetch(),
   }
 }

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { Inspector } from '@/components/Inspector'
-import { useWorkbench } from '@/context/WorkbenchContext'
+import { useWorkbench } from '@/context/workbench'
 import type { Timeline } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
@@ -33,18 +33,13 @@ export function FindingPage() {
       selected={selected}
       loading={loading}
       timeline={timeline.data}
-      explainPending={wb.explainPending}
       reviewPending={wb.reviewPending}
       reviewClosed={reviewClosed}
       reviewError={wb.reviewError}
       reviewSuccess={wb.reviewSuccess}
-      explainResult={wb.explainResult}
-      highlightedEvidenceId={wb.highlightedEvidenceId}
       showBackLink
-      onExplain={() => selected && wb.explainFinding(selected.id)}
       onApprove={() => selected && wb.approveFinding(selected.id)}
       onDismiss={() => selected && wb.dismissFinding(selected.id)}
-      onEvidenceHighlight={wb.highlightEvidence}
     />
   )
 }

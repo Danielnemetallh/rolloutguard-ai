@@ -18,6 +18,34 @@ from rolloutguard_api.services.reconcile import CanonicalSite, reconcile
 from rolloutguard_api.services.rules import RULE_VERSION, AnalysisResult, evaluate_sites
 
 
+def _index_memory_and_docs(
+    db: Session,
+    project: models.Project,
+    run: models.AnalysisRun,
+    *,
+    fire: bool,
+) -> None:
+    from rolloutguard_api.ai.memory import index_analysis_corpus, rebuild_site_summaries
+    from rolloutguard_api.services.actions import fire_watches
+    from rolloutguard_api.services.documents import ensure_synthetic_sow, ingest_document
+
+    settings = get_settings()
+    index_analysis_corpus(db, run.id, project.id)
+    rebuild_site_summaries(db, run.id)
+    if fire:
+        fire_watches(db, project_id=project.id, analysis_run_id=run.id)
+    try:
+        sow = ensure_synthetic_sow(Path(settings.synthetic_dir))
+        ingest_document(db, project_id=project.id, path=sow, original_name=sow.name)
+        note = sow.parent / "partnermail_nordturm.md"
+        if note.exists():
+            ingest_document(db, project_id=project.id, path=note, original_name=note.name)
+    except Exception as exc:  # noqa: BLE001
+        from rolloutguard_api.core.logging import get_logger
+
+        get_logger(__name__).warning("synthetic_sow_ingest_failed", error=type(exc).__name__)
+
+
 def ensure_demo_project(db: Session) -> models.Project:
     project = db.query(models.Project).filter_by(name="Synthetic Rollout Demo").first()
     if project:
@@ -130,7 +158,11 @@ def run_analysis_from_paths(
                 results.get("schedule"),
                 results.get("status"),
             )
+            from rolloutguard_api.services.actions import apply_overrides
+
+            apply_overrides(db, project.id, sites)
             analysis = evaluate_sites(sites, as_of=as_of or date.today())
+            _index_memory_and_docs(db, project, run, fire=False)
             return run, analysis, sites
 
     batch = models.ImportBatch(
@@ -150,6 +182,9 @@ def run_analysis_from_paths(
         results.get("schedule"),
         results.get("status"),
     )
+    from rolloutguard_api.services.actions import apply_overrides
+
+    apply_overrides(db, project.id, sites)
     analysis = evaluate_sites(sites, as_of=as_of or date.today())
 
     for site in sites.values():
@@ -197,6 +232,7 @@ def run_analysis_from_paths(
     batch.completed_at = datetime.now(UTC)
     db.commit()
     db.refresh(run)
+    _index_memory_and_docs(db, project, run, fire=True)
     return run, analysis, sites
 
 

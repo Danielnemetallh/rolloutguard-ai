@@ -24,6 +24,10 @@ data/uploads/*
 !data/uploads/.gitkeep
 !data/synthetic/*.xlsx
 !data/synthetic/*.json
+data/synthetic/docs/*
+!data/synthetic/docs/.gitkeep
+!data/synthetic/docs/*.pdf
+!data/synthetic/docs/*.md
 
 # OS / IDE
 .DS_Store

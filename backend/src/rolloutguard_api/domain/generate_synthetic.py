@@ -534,11 +534,16 @@ def generate(output_dir: Path, n_sites: int = 50) -> dict[str, Path]:
         },
     )
 
+    from rolloutguard_api.services.documents import ensure_synthetic_sow
+
+    sow = ensure_synthetic_sow(output_dir)
+
     return {
         "contract": contract,
         "schedule": schedule,
         "status": status,
         "manifest": manifest,
+        "sow": sow,
     }
 
 

@@ -1,46 +1,79 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
-import { AgentDock } from './components/AgentDock'
+import { AgentSidebar } from './components/AgentSidebar'
 import { Layout } from './components/Layout'
-import { TopBar } from './components/TopBar'
-import { WorkbenchProvider, useWorkbench } from './context/WorkbenchContext'
+import { NavigationSidebar } from './components/NavigationSidebar'
+import { WorkbenchProvider } from './context/WorkbenchContext'
+import { useWorkbench } from './context/workbench'
+import { useAgentViewportContext } from './hooks/useAgentViewportContext'
+import { useStoredBoolean } from './hooks/useStoredBoolean'
+import { DocumentsPage } from './pages/DocumentsPage'
+import { ExceptionsPage } from './pages/ExceptionsPage'
 import { FindingPage } from './pages/FindingPage'
 import { Leitstand } from './pages/Leitstand'
+import { RunsPage } from './pages/RunsPage'
 
 const queryClient = new QueryClient()
 
 function Shell() {
   const wb = useWorkbench()
+  const viewport = useAgentViewportContext()
+  const [navigationCollapsed, setNavigationCollapsed] = useStoredBoolean(
+    'rolloutguard.sidebar.navigation.collapsed',
+    false,
+  )
+  const [agentCollapsed, setAgentCollapsed] = useStoredBoolean(
+    'rolloutguard.sidebar.agent.collapsed',
+    true,
+  )
 
   return (
     <Layout
-      header={
-        <TopBar
-          isLoading={wb.isLoading}
-          error={wb.error}
+      navigationCollapsed={navigationCollapsed}
+      agentCollapsed={agentCollapsed}
+      navigation={
+        <NavigationSidebar
+          collapsed={navigationCollapsed}
+          onToggle={() => setNavigationCollapsed((value) => !value)}
+        />
+      }
+      agent={
+        <AgentSidebar
+          collapsed={agentCollapsed}
           analysisId={wb.analysisId}
+          draft={wb.question}
+          turns={wb.history}
+          actions={wb.actions}
+          onToggle={() => setAgentCollapsed((value) => !value)}
+          onNewSession={wb.startNewAgentSession}
+          onShowHistory={wb.loadAgentHistory}
+          historyOpen={wb.agentHistoryOpen}
+          savedSessions={wb.savedAgentSessions}
+          onResumeSession={wb.resumeAgentSession}
+          onDeleteSession={wb.deleteAgentSession}
+          onRenameSession={wb.renameAgentSession}
+          onCloseHistory={wb.closeAgentHistory}
+          viewport={viewport}
+          onDraftChange={wb.questionChange}
+          onSubmit={(question) => wb.submitQuestion(question, viewport)}
+          onRetry={(turnId) => wb.retryQuestion(turnId, viewport)}
+          onConfirmAction={wb.confirmAction}
+          onDismissAction={wb.dismissAction}
+          actionMutationPending={wb.actionMutationPending}
           projectId={wb.projectId}
-          analyzePending={wb.analyzePending}
-          exportPending={wb.exportPending}
-          onAnalyze={wb.onAnalyze}
-          onExport={wb.onExport}
+          uploadPending={wb.uploadPending}
+          onUploadDocument={wb.onUploadDocument}
+          onEvidenceSelect={wb.highlightEvidence}
         />
       }
     >
       <Routes>
         <Route index element={<Leitstand />} />
+        <Route path="ausnahmen" element={<ExceptionsPage />} />
+        <Route path="dokumente" element={<DocumentsPage />} />
+        <Route path="laeufe" element={<RunsPage />} />
         <Route path="befund/:id" element={<FindingPage />} />
       </Routes>
-      <AgentDock
-        analysisId={wb.analysisId}
-        question={wb.question}
-        pending={wb.askPending}
-        error={wb.askError}
-        result={wb.askResult}
-        onQuestionChange={wb.questionChange}
-        onSubmit={wb.submitQuestion}
-        onEvidenceSelect={wb.highlightEvidence}
-      />
     </Layout>
   )
 }

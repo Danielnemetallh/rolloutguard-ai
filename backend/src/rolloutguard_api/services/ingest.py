@@ -132,18 +132,21 @@ def validate_upload(path: Path) -> None:
     if path.suffix.lower() not in ALLOWED_SUFFIXES:
         raise IngestError(
             "UNSUPPORTED_FILE_TYPE",
-            "Only .xlsx workbooks are accepted in the MVP.",
+            "Nur .xlsx-Arbeitsmappen werden für den strukturierten Import akzeptiert.",
             {"filename": path.name, "suffix": path.suffix},
         )
     if path.stat().st_size > MAX_UNCOMPRESSED_HINT_BYTES:
         raise IngestError(
             "FILE_TOO_LARGE",
-            "Workbook exceeds the configured size limit.",
+            "Die Arbeitsmappe überschreitet die zulässige Größe.",
             {"filename": path.name, "size": path.stat().st_size},
         )
     # Reject macro-enabled / OLE trick names
     if path.suffix.lower() in {".xlsm", ".xlsb", ".xls"}:
-        raise IngestError("MACRO_NOT_ALLOWED", "Macro-enabled Excel files are rejected.")
+        raise IngestError(
+            "MACRO_NOT_ALLOWED",
+            "Makro-fähige Excel-Dateien werden abgelehnt.",
+        )
 
 
 def _infer_kind(values: list[Any]) -> str:
@@ -201,7 +204,7 @@ def suggest_mapping(
             canonical_field=field,
             confidence=0.98,
             method="exact",
-            rationale=f"Exact alias match for '{header}' → {field}",
+            rationale=f"Exakter Alias für „{header}“ → {field}",
             needs_approval=False,
         )
 
@@ -226,7 +229,7 @@ def suggest_mapping(
             canonical_field=best_field,
             confidence=round(best_score, 3),
             method="fuzzy",
-            rationale=f"Fuzzy match '{header}' ~ '{best_label}' → {best_field}",
+            rationale=f"Ungefähre Zuordnung „{header}“ ~ „{best_label}“ → {best_field}",
             needs_approval=needs,
         )
 
@@ -237,7 +240,7 @@ def suggest_mapping(
             canonical_field="site_id",
             confidence=0.45,
             method="fuzzy",
-            rationale="Column looks like an identifier; weak site_id suggestion",
+            rationale="Spalte wirkt wie eine Kennung; schwacher Vorschlag für site_id",
             needs_approval=True,
         )
 
@@ -246,7 +249,7 @@ def suggest_mapping(
         canonical_field=None,
         confidence=0.0,
         method="none",
-        rationale="No confident mapping; mark UNKNOWN or map manually",
+        rationale="Keine sichere Zuordnung — manuell prüfen",
         needs_approval=True,
     )
 
@@ -273,12 +276,16 @@ def profile_workbook(path: Path) -> IngestResult:
     except Exception as exc:  # noqa: BLE001
         raise IngestError(
             "CORRUPT_WORKBOOK",
-            "Workbook could not be opened.",
+            "Die Arbeitsmappe konnte nicht geöffnet werden.",
             {"filename": path.name, "error": type(exc).__name__},
         ) from exc
 
     if not wb.sheetnames:
-        raise IngestError("EMPTY_WORKBOOK", "Workbook has no sheets.", {"filename": path.name})
+        raise IngestError(
+            "EMPTY_WORKBOOK",
+            "Die Arbeitsmappe enthält keine Tabellenblätter.",
+            {"filename": path.name},
+        )
 
     sheet_name = wb.sheetnames[0]
     ws = wb[sheet_name]
@@ -286,7 +293,11 @@ def profile_workbook(path: Path) -> IngestResult:
     try:
         header_row = next(rows_iter)
     except StopIteration as exc:
-        raise IngestError("EMPTY_SHEET", "Sheet has no rows.", {"sheet": sheet_name}) from exc
+        raise IngestError(
+            "EMPTY_SHEET",
+            "Das Tabellenblatt enthält keine Zeilen.",
+            {"sheet": sheet_name},
+        ) from exc
 
     headers = [
         str(h).strip() if h is not None else f"UNNAMED_{i}"
@@ -295,7 +306,7 @@ def profile_workbook(path: Path) -> IngestResult:
     if len(headers) > MAX_COLS:
         raise IngestError(
             "TOO_MANY_COLUMNS",
-            "Sheet exceeds column limit.",
+            "Das Tabellenblatt überschreitet die Spaltengrenze.",
             {"columns": len(headers), "max": MAX_COLS},
         )
 
@@ -304,7 +315,7 @@ def profile_workbook(path: Path) -> IngestResult:
         if i > MAX_ROWS + 1:
             raise IngestError(
                 "TOO_MANY_ROWS",
-                "Sheet exceeds row limit.",
+                "Das Tabellenblatt überschreitet die Zeilengrenze.",
                 {"max": MAX_ROWS},
             )
         if all(v is None or str(v).strip() == "" for v in row):

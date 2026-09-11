@@ -14,7 +14,9 @@ mobile-network rollout data.
 | Backend | Python 3.12 + FastAPI + Pydantic + SQLAlchemy |
 | Database | SQLite (local demo) or Neon PostgreSQL |
 | Excel | openpyxl + Polars |
-| AI | OpenCode Zen (OpenAI-compatible) + deterministic mock |
+| Documents | pypdf + python-docx |
+| AI | DeepSeek API + deterministic mock |
+| Integrations | Composio (Gmail draft, Calendar, Notion) after Freigeben |
 
 ## Prerequisites
 
@@ -50,31 +52,33 @@ cd ..\frontend; npm ci
 
 5. Open http://localhost:5173 — API docs at http://127.0.0.1:8000/docs
 
-The demo UI and walkthrough scripts ([docs/DEMO.md](docs/DEMO.md), [docs/INTERVIEW.md](docs/INTERVIEW.md)) are in **German**; API paths and rule IDs stay English.
+The demo UI is in **German**; API paths and rule IDs stay English.
 
-**Demo reset:** `.\scripts\demo-reset.ps1`  
-**Demo script:** [docs/DEMO.md](docs/DEMO.md)  
-**Interview guide (DE):** [docs/INTERVIEW.md](docs/INTERVIEW.md)
+**Demo reset:** `.\scripts\demo-reset.ps1`
+
+Set `DEEPSEEK_API_KEY` and `LLM_ENABLED=true` for live explanations. Set
+`COMPOSIO_API_KEY` and connect Gmail / Calendar / Notion for the interview path.
+Without Composio, Freigeben writes `.eml` / `.ics` under `data/uploads/actions/`
+(CI / offline).
 
 ## Scope / non-goals
 
-**In scope:** multi-workbook import, column mapping, reconciliation, versioned
-deterministic rules, findings with cell-level lineage, KPIs, human review,
-run history/diff, grounded AI explanations, read-only agent, Excel export, tests.
+**In scope:** multi-workbook import, PDF/DOCX ingest, column mapping, reconciliation,
+versioned deterministic rules, findings with cell-level lineage, KPIs, human review,
+run history/diff, grounded AI explanations, allowlisted agent (read / retrieve /
+extract / draft), confirm-gated Calendar/Gmail/Notion, Excel export, tests.
 
-**Out of scope:** real operator data, autonomous writeback, custom model
-training, RAG (pgvector reserved for a later document corpus), containers,
-multi-provider LLM switching.
+**Out of scope:** real operator data, silent writeback, custom model training,
+containers, swapping the agent loop for a third-party harness.
 
 ## Project layout
 
 ```
 backend/          FastAPI application (uv)
 frontend/         React UI (Vite)
-data/synthetic/   Generated demo workbooks
+data/synthetic/   Generated demo workbooks + docs
 data/uploads/     Runtime uploads (gitignored)
 scripts/          Local run helpers (no Docker)
-docs/             Demo + interview guides
 ```
 
 ## Tests
@@ -85,7 +89,7 @@ uv run pytest
 uv run ruff check src tests
 ```
 
-Live OpenCode Zen smoke (optional, uses `.env` key):
+Live DeepSeek smoke (optional, uses `.env` key):
 
 ```powershell
 uv run pytest tests/test_live_llm_smoke.py -q
@@ -94,17 +98,12 @@ uv run pytest tests/test_live_llm_smoke.py -q
 ## AI layer
 
 - Deterministic mock is always available (`force_mock` / `LLM_ENABLED=false`)
-- Live provider: OpenCode Zen OpenAI-compatible API
-- Endpoints:
-  - `POST /api/findings/{id}/explain`
-  - `POST /api/assistant/queries`
-  - `POST /api/assistant/classify-blocker`
-  - `GET /api/assistant/status`
-- Agent tools (read-only): portfolio KPIs, list findings, site timeline, rule definition
+- Live provider: DeepSeek OpenAI-compatible API (`deepseek-v4-flash`)
+- The model drafts only. `POST /api/actions/{id}/confirm` is the only path to Composio.
+- Agent tools: KPIs, findings, timeline, rules, session/decision/corpus memory,
+  document extract, draft calendar/mail/board/override/watch/task
 
 ## Export
-
-Use the **Export (.xlsx + .md)** button in the UI, or:
 
 ```http
 POST /api/analyses/{id}/exports
