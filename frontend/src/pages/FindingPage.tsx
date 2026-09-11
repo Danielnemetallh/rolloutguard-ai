@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { Inspector } from '@/components/Inspector'
-import { useWorkbench } from '@/context/workbench'
+import { PageHeader } from '@/components/PageHeader'
+import { useWorkbench } from '@/context/WorkbenchContext'
+import { API_BASE } from '@/lib/api'
 import type { Timeline } from '../types'
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 
 export function FindingPage() {
   const { id } = useParams<{ id: string }>()
@@ -29,61 +29,20 @@ export function FindingPage() {
   })
 
   return (
-    <Inspector
-      selected={selected}
-      loading={loading}
-      timeline={timeline.data}
-      explainPending={wb.explainPending}
-      reviewPending={wb.reviewPending}
-      reviewClosed={reviewClosed}
-      reviewError={wb.reviewError}
-      reviewSuccess={wb.reviewSuccess}
-      explainResult={wb.explainResult}
-      highlightedEvidenceId={wb.highlightedEvidenceId}
-      showBackLink
-      onExplain={() => selected && wb.explainFinding(selected.id)}
-      onApprove={() => selected && wb.approveFinding(selected.id)}
-      onDismiss={() => selected && wb.dismissFinding(selected.id)}
-      onEvidenceHighlight={wb.highlightEvidence}
-      onDraftAction={(kind) => {
-        if (!selected) return
-        const due = String(selected.facts.contractual_due_date ?? '2026-09-15')
-        const payloads: Record<typeof kind, Record<string, unknown>> = {
-          calendar: {
-            site_id: selected.site_id,
-            title: `SLA-Risiko ${selected.site_id}`,
-            date: due,
-            milestone_kind: 'due',
-            description: selected.message,
-          },
-          email: {
-            to: 'partner@nordturm.demo',
-            subject: `${selected.rule_id} ${selected.site_id}`,
-            body: selected.message,
-            site_id: selected.site_id,
-          },
-          board: {
-            title: `${selected.rule_id} ${selected.site_id}`,
-            body: selected.message,
-            site_id: selected.site_id,
-          },
-          override: {
-            site_id: selected.site_id,
-            field: 'forecast_date',
-            new_value: due,
-            reason: 'Analyst Override aus Inspektor',
-          },
-          watch: {
-            site_id: selected.site_id,
-            rule_id: selected.rule_id,
-          },
-        }
-        wb.onDraftAction({
-          action_type: kind,
-          payload: payloads[kind],
-          site_id: selected.site_id,
-        })
-      }}
-    />
+    <div className="space-y-5">
+      <PageHeader title="Inspektor" description="Befund im Detail." />
+      <Inspector
+        selected={selected}
+        loading={loading}
+        timeline={timeline.data}
+        reviewPending={wb.reviewPending}
+        reviewClosed={reviewClosed}
+        reviewError={wb.reviewError}
+        reviewSuccess={wb.reviewSuccess}
+        showBackLink
+        onApprove={() => selected && wb.approveFinding(selected.id)}
+        onDismiss={() => selected && wb.dismissFinding(selected.id)}
+      />
+    </div>
   )
 }

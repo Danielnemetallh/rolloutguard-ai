@@ -106,6 +106,7 @@ export type AgentTurn = {
   question: string
   status: 'pending' | 'complete' | 'error'
   result?: AgentResult
+  errorMessage?: string
 }
 
 export type ProposedAction = {

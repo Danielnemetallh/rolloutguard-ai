@@ -1,11 +1,112 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import { useAgentAsk } from '@/hooks/useAgentAsk'
 import { useAnalysisSession } from '@/hooks/useAnalysisSession'
 import { useFindingActions } from '@/hooks/useFindingActions'
 import { useFindingsQueue } from '@/hooks/useFindingsQueue'
 import { useProposedActions } from '@/hooks/useProposedActions'
 import { useWorkbenchExtras } from '@/hooks/useWorkbenchExtras'
-import { WorkbenchContext, type WorkbenchContextValue } from '@/context/workbench'
+import type {
+  AgentTurn,
+  Diff,
+  Finding,
+  HeroFinding,
+  IntegrationStatus,
+  Meta,
+  ProposedAction,
+  SortKey,
+  UploadedDocument,
+} from '../types'
+
+export type MappingRow = {
+  id: number
+  source_header: string
+  canonical_field: string | null
+  filename: string
+}
+
+export type DraftActionArgs = {
+  action_type: string
+  payload: Record<string, unknown>
+  site_id?: string
+}
+
+export type WorkbenchContextValue = {
+  meta: Meta | undefined
+  isLoading: boolean
+  error: Error | null
+  analysisId: number | null
+  projectId: number | undefined
+  analyzePending: boolean
+  exportPending: boolean
+  kpis: Record<string, number> | undefined
+  diff: Diff | undefined
+  analyses:
+    | Array<{
+        id: number
+        batch_id: number
+        status: string
+        kpis: Record<string, number>
+        created_at: string | null
+      }>
+    | undefined
+  findings: Finding[]
+  findingsLoading: boolean
+  totalCount: number | undefined
+  visibleFindings: Finding[]
+  search: string
+  severity: string
+  sortKey: SortKey
+  sortDir: 'asc' | 'desc'
+  heroFindings: HeroFinding[] | undefined
+  showHeroHints: boolean
+  question: string
+  askPending: boolean
+  askError: boolean
+  history: AgentTurn[]
+  activeSessionTitle: string
+  sessions: ReturnType<typeof useAgentAsk>['sessions']
+  explainPending: boolean
+  reviewPending: boolean
+  reviewError: boolean
+  reviewSuccess: boolean
+  highlightedEvidenceId: string | null
+  integrations: IntegrationStatus | undefined
+  documents: UploadedDocument[]
+  pendingMappings: MappingRow[]
+  uploadPending: boolean
+  actions: ProposedAction[]
+  draftCount: number
+  confirmPending: boolean
+  dismissPending: boolean
+  onAnalyze: () => void
+  onExport: () => void
+  onSelectRun: (id: number) => void
+  onSearchChange: (value: string) => void
+  onSeverityChange: (value: string) => void
+  onToggleSort: (key: SortKey) => void
+  matchHeroFinding: (hero: HeroFinding) => Finding | undefined
+  questionChange: (value: string) => void
+  submitQuestion: (override?: string, contextLabel?: string) => void
+  retryTurn: (turn: AgentTurn, contextLabel?: string) => void
+  startNewChat: () => void
+  selectSession: (id: string) => void
+  highlightEvidence: (id: string) => void
+  approveFinding: (id: number) => void
+  dismissFinding: (id: number) => void
+  onUploadDocument: (file: File) => void
+  onConnect: () => void
+  onApproveMapping: (id: number) => void
+  onConfirmAction: (id: number) => void
+  onDismissAction: (id: number) => void
+}
+
+const WorkbenchContext = createContext<WorkbenchContextValue | null>(null)
+
+export function useWorkbench() {
+  const ctx = useContext(WorkbenchContext)
+  if (!ctx) throw new Error('useWorkbench must be used within WorkbenchProvider')
+  return ctx
+}
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [statusOverrides, setStatusOverrides] = useState<Record<number, string>>({})
@@ -16,7 +117,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const actions = useFindingActions(setStatusOverrides)
   const agent = useAgentAsk(session.analysisId)
   const extras = useWorkbenchExtras(session.projectId, session.analysisId)
-  const proposedActions = useProposedActions(session.projectId)
+  const proposed = useProposedActions(session.projectId)
 
   const value = useMemo<WorkbenchContextValue>(
     () => ({
@@ -30,11 +131,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       kpis: session.kpis,
       diff: session.diff,
       analyses: session.analyses,
-      analysesLoading: session.analysesLoading,
-      analysesError: session.analysesError,
       findings: queue.findings,
       findingsLoading: queue.findingsLoading,
-      findingsError: queue.findingsError,
       totalCount: queue.totalCount,
       visibleFindings: queue.visibleFindings,
       search: queue.search,
@@ -46,31 +144,26 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       question: agent.question,
       askPending: agent.askPending,
       askError: agent.askError,
-      askResult: agent.askResult,
       history: agent.history,
-      retryQuestion: agent.retryQuestion,
+      activeSessionTitle: agent.activeSessionTitle,
+      sessions: agent.sessions,
       explainPending: actions.explainPending,
       reviewPending: actions.reviewPending,
       reviewError: actions.reviewError,
       reviewSuccess: actions.reviewSuccess,
-      explainResult: actions.explainResult,
       highlightedEvidenceId,
       integrations: extras.integrations,
       documents: extras.documents,
-      documentsLoading: extras.documentsLoading,
-      documentsError: extras.documentsError,
       pendingMappings: extras.pendingMappings,
       uploadPending: extras.uploadPending,
-      actions: proposedActions.actions,
-      actionsLoading: proposedActions.actionsLoading,
-      actionsError: proposedActions.actionsError,
-      pendingActionCount: proposedActions.pendingActionCount,
-      actionMutationPending: proposedActions.actionMutationPending,
+      actions: proposed.actions,
+      draftCount: proposed.pendingActionCount,
+      confirmPending: proposed.actionMutationPending,
+      dismissPending: proposed.actionMutationPending,
       onAnalyze: () => session.onAnalyze(() => setStatusOverrides({})),
       onExport: session.onExport,
       onSelectRun: (id) => {
         session.setAnalysisId(id)
-        actions.resetExplain()
       },
       onSearchChange: queue.onSearchChange,
       onSeverityChange: queue.onSeverityChange,
@@ -78,29 +171,19 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       matchHeroFinding: queue.matchHeroFinding,
       questionChange: agent.questionChange,
       submitQuestion: agent.submitQuestion,
-      highlightEvidence: (id) => {
-        setHighlightedEvidenceId(id)
-        document.getElementById(`evidence-${id}`)?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-        })
-      },
-      explainFinding: actions.explainFinding,
+      retryTurn: agent.retryTurn,
+      startNewChat: agent.startNewChat,
+      selectSession: agent.selectSession,
+      highlightEvidence: (id) => setHighlightedEvidenceId(id),
       approveFinding: actions.approveFinding,
       dismissFinding: actions.dismissFinding,
-      resetExplain: actions.resetExplain,
       onUploadDocument: extras.onUploadDocument,
       onConnect: extras.onConnect,
-      onDraftAction: extras.onDraftAction,
       onApproveMapping: extras.onApproveMapping,
-      retryFindings: queue.retryFindings,
-      retryDocuments: extras.retryDocuments,
-      retryActions: proposedActions.retryActions,
-      confirmAction: proposedActions.confirmAction,
-      dismissAction: proposedActions.dismissAction,
-      retryAnalyses: session.retryAnalyses,
+      onConfirmAction: proposed.confirmAction,
+      onDismissAction: proposed.dismissAction,
     }),
-    [session, queue, actions, agent, extras, proposedActions, highlightedEvidenceId],
+    [session, queue, actions, agent, extras, proposed, highlightedEvidenceId],
   )
 
   return <WorkbenchContext.Provider value={value}>{children}</WorkbenchContext.Provider>

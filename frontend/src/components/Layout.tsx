@@ -1,38 +1,42 @@
 import type { ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 
 type LayoutProps = {
-  header: ReactNode
-  navigation: ReactNode
-  agent: ReactNode
-  navigationCollapsed: boolean
-  agentCollapsed: boolean
+  nav: ReactNode
+  agent: ReactNode | null
   children: ReactNode
+  navCollapsed: boolean
+  agentOpen: boolean
+  desktop: boolean
 }
 
 export function Layout({
-  header,
-  navigation,
+  nav,
   agent,
-  navigationCollapsed,
-  agentCollapsed,
   children,
+  navCollapsed,
+  agentOpen,
+  desktop,
 }: LayoutProps) {
+  const navWidth = navCollapsed ? '72px' : '224px'
+  const agentWidth = desktop && agentOpen ? '400px' : '0px'
+
   return (
     <div
-      className={`workbench-shell ${navigationCollapsed ? 'navigation-collapsed' : ''} ${agentCollapsed ? 'agent-collapsed' : ''}`}
+      className={cn(
+        'workbench-shell grid min-h-dvh bg-background',
+        navCollapsed && 'navigation-collapsed',
+        !agentOpen && 'agent-collapsed',
+      )}
+      style={{
+        gridTemplateColumns: `${navWidth} minmax(0, 1fr) ${agentWidth}`,
+      }}
     >
-      <aside id="primary-navigation" className="workbench-navigation" aria-label="Anwendungsnavigation">
-        {navigation}
-      </aside>
+      {nav}
       <div className="min-w-0 bg-background">
-        <div className="sticky top-0 z-30 border-b border-border bg-[var(--surface-raised)]">
-          {header}
-        </div>
         <main className="min-w-0 px-5 py-5 xl:px-7">{children}</main>
       </div>
-      <aside id="evidence-agent" className="workbench-agent" aria-label="Evidenz-Copilot">
-        {agent}
-      </aside>
+      {agentOpen && agent}
     </div>
   )
 }

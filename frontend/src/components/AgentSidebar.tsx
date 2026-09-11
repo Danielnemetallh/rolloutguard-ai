@@ -1,243 +1,318 @@
-import { Bot, CornerDownLeft, PanelRightClose, RotateCcw } from 'lucide-react'
-import { useMemo } from 'react'
+import { useRef } from 'react'
+import {
+  ArrowUp,
+  ChevronDown,
+  MessageSquarePlus,
+  PanelRightClose,
+  Plus,
+  Settings2,
+} from 'lucide-react'
 import { CitationList } from '@/components/CitationList'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ACTION_TYPE_LABELS, actionSummary } from '@/lib/actionLabels'
 import { QUESTION_CHIPS } from '@/lib/agentQuestions'
-import type { AgentTurn, ProposedAction } from '@/types'
-
-const TOOL_TRACE_LABELS: Record<string, string> = {
-  get_portfolio_kpis: 'Kennzahlen gelesen',
-  list_findings: 'Befunde gelistet',
-  get_site_timeline: 'Projektverlauf geladen',
-  get_rule_definition: 'Regeldefinition geladen',
-  recall_session: 'Sitzung gelesen',
-  search_decisions: 'Entscheidungen gesucht',
-  search_corpus: 'Dokumentkorpus durchsucht',
-  get_site_summary: 'Standortzusammenfassung gelesen',
-  list_documents: 'Dokumente gelistet',
-  extract_document: 'Dokument gelesen',
-}
+import type { AgentSession } from '@/hooks/useAgentAsk'
+import type { AgentTurn, IntegrationStatus, ProposedAction } from '../types'
 
 type AgentSidebarProps = {
-  collapsed: boolean
+  onClose: () => void
   analysisId: number | null
-  draft: string
-  turns: AgentTurn[]
+  question: string
+  pending: boolean
+  history: AgentTurn[]
+  sessions: AgentSession[]
+  activeSessionTitle: string
+  pageContextLabel: string
   actions: ProposedAction[]
-  onToggle: () => void
-  onDraftChange: (value: string) => void
-  onSubmit: (question?: string) => void
-  onRetry: (turnId: string) => void
-  onConfirmAction: (actionId: number) => void
-  onEvidenceSelect?: (evidenceId: string) => void
+  confirmPending: boolean
+  dismissPending: boolean
+  integrations: IntegrationStatus | undefined
+  onQuestionChange: (value: string) => void
+  onSubmit: (override?: string) => void
+  onRetry: (turn: AgentTurn) => void
+  onNewChat: () => void
+  onSelectSession: (id: string) => void
+  onConfirm: (id: number) => void
+  onDismiss: (id: number) => void
+  onConnect: () => void
+  onUploadDocument?: (file: File) => void
 }
 
 export function AgentSidebar({
-  collapsed,
+  onClose,
   analysisId,
-  draft,
-  turns,
+  question,
+  pending,
+  history,
+  sessions,
+  activeSessionTitle,
+  pageContextLabel,
   actions,
-  onToggle,
-  onDraftChange,
+  confirmPending,
+  dismissPending,
+  integrations,
+  onQuestionChange,
   onSubmit,
   onRetry,
-  onConfirmAction,
-  onEvidenceSelect,
+  onNewChat,
+  onSelectSession,
+  onConfirm,
+  onDismiss,
+  onConnect,
+  onUploadDocument,
 }: AgentSidebarProps) {
-  const pending = turns.some((turn) => turn.status === 'pending')
-  const latestCompleteId = useMemo(
-    () => [...turns].reverse().find((turn) => turn.status === 'complete')?.id,
-    [turns],
-  )
-
-  if (collapsed) {
-    return (
-      <div className="flex h-dvh flex-col items-center border-l border-border bg-[var(--surface-raised)] py-4">
-        <Bot className="size-5 text-primary" aria-hidden="true" />
-        {pending && <span className="mt-2 size-2 rounded-full bg-muted-foreground" aria-label="Antwort ausstehend" />}
-        <button
-          type="button"
-          className="mt-4 flex flex-1 items-start rounded-md px-2 py-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/40 [writing-mode:vertical-rl]"
-          onClick={onToggle}
-          aria-controls="evidence-agent"
-          aria-expanded={false}
-          aria-label="Agent öffnen"
-        >
-          Agent öffnen
-        </button>
-      </div>
-    )
-  }
+  const fileRef = useRef<HTMLInputElement>(null)
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col border-l border-border bg-[var(--surface-raised)]">
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
-        <span className="flex size-8 items-center justify-center rounded-md bg-[var(--selection)] text-primary">
-          <Bot className="size-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-semibold">Evidenz-Copilot</h2>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {analysisId ? `Lauf #${analysisId}, verankerte Antworten` : 'Kein Lauf ausgewählt'}
-          </p>
-        </div>
-        <button
+    <aside
+      id="evidence-agent"
+      className="flex h-dvh min-h-0 flex-col border-l border-border bg-[var(--surface-raised)]"
+    >
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-1 text-left text-sm font-medium"
+            >
+              <span className="truncate">{activeSessionTitle}</span>
+              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {sessions.length === 0 && (
+              <DropdownMenuItem disabled>Keine früheren Chats</DropdownMenuItem>
+            )}
+            {sessions.map((s) => (
+              <DropdownMenuItem key={s.id} onClick={() => onSelectSession(s.id)}>
+                {s.title}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button type="button" variant="ghost" size="icon-xs" aria-label="Neuer Chat" onClick={onNewChat}>
+          <MessageSquarePlus className="size-4" />
+        </Button>
+        <Button
           type="button"
-          className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
-          onClick={onToggle}
-          aria-controls="evidence-agent"
-          aria-expanded={true}
-          aria-label="Agent einklappen"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Agent schließen"
+          onClick={onClose}
         >
           <PanelRightClose className="size-4" />
-        </button>
+        </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5" aria-label="Agent-Unterhaltung">
-        {turns.length === 0 && (
-          <div className="space-y-4">
-            <p className="max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
-              Fragen Sie nach Befunden, Dokumenten oder nächsten Schritten. Der Copilot kann nur Entwürfe anlegen.
+      <ScrollArea className="min-h-0 flex-1 px-4 py-5">
+        <div className="space-y-7" aria-live="polite">
+          {!analysisId && (
+            <p className="text-sm text-muted-foreground">
+              Zuerst <strong>Analyse starten</strong>, dann Fragen zum Lauf stellen.
             </p>
+          )}
+          {analysisId && history.length === 0 && (
             <details className="text-sm">
-              <summary className="cursor-pointer font-medium text-primary">Beispielfragen</summary>
-              <div className="mt-2 space-y-1.5">
-                {QUESTION_CHIPS.map((question) => (
-                  <button
-                    key={question}
+              <summary className="cursor-pointer text-muted-foreground">Beispielfragen</summary>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {QUESTION_CHIPS.map((q) => (
+                  <Button
+                    key={q}
                     type="button"
-                    disabled={!analysisId}
-                    onClick={() => onSubmit(question)}
-                    className="block w-full rounded-md border border-border px-3 py-2 text-left text-xs leading-relaxed hover:bg-muted disabled:opacity-50"
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => onSubmit(q)}
+                    className="h-auto whitespace-normal text-left"
                   >
-                    {question}
-                  </button>
+                    {q.length > 42 ? `${q.slice(0, 42)}…` : q}
+                  </Button>
                 ))}
               </div>
             </details>
-          </div>
-        )}
-
-        <div className="space-y-7">
-          {turns.map((turn) => {
-            const proposedActions = actions.filter((action) =>
-              (turn.result?.result.proposed_action_ids ?? []).includes(action.id),
-            )
-            return (
-              <article key={turn.id} className="space-y-3 border-b border-border pb-6 last:border-0">
-                <section
-                  role="region"
-                  aria-label="Nachricht von Sie"
-                  className="ml-auto max-w-[85%] rounded-lg bg-[var(--message-user)] px-3 py-2.5"
-                >
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Sie</p>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{turn.question}</p>
-                </section>
-
-                <section
-                  role="region"
-                  aria-label="Antwort von Evidenz-Copilot"
-                  className="mr-auto w-full rounded-lg border border-border bg-background px-3 py-3"
-                >
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Evidenz-Copilot
-                  </p>
-                  {turn.status === 'pending' && (
-                    <div className="space-y-2" aria-label="Antwort wird erstellt">
-                      <span className="text-xs text-muted-foreground">Antwort wird erstellt</span>
-                      <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
-                      <div className="h-3 w-3/5 animate-pulse rounded bg-muted" />
-                    </div>
-                  )}
-                  {turn.status === 'error' && (
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm text-[var(--critical)]">Antwort konnte nicht geladen werden.</p>
-                      <Button size="sm" variant="outline" onClick={() => onRetry(turn.id)}>
-                        <RotateCcw className="size-3.5" /> Wiederholen
-                      </Button>
-                    </div>
-                  )}
-                  {turn.status === 'complete' && turn.result && (
-                    <>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {turn.result.result.answer}
-                      </p>
-                      <CitationList
-                        citations={turn.result.result.citations ?? []}
-                        onEvidenceSelect={onEvidenceSelect}
-                      />
-                      {proposedActions.length > 0 && (
-                        <div className="mt-4 space-y-2 border-t border-border pt-3">
-                          <p className="text-xs font-medium">Vorgeschlagene Aktionen</p>
-                          {proposedActions.map((action) => (
-                            <div key={action.id} className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2 text-xs">
-                              <span className="truncate">{action.action_type} #{action.id}</span>
-                              {action.status === 'draft' ? (
-                                <Button size="sm" onClick={() => onConfirmAction(action.id)}>Freigeben</Button>
-                              ) : (
-                                <span className="text-muted-foreground">{action.status}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {turn.result.result.tool_trace.length > 0 && (
-                        <details className="mt-3 text-xs text-muted-foreground">
-                          <summary className="cursor-pointer font-medium">
-                            Verwendete Werkzeuge ({turn.result.result.tool_trace.length})
-                          </summary>
-                          <ul className="mt-2 space-y-1 pl-4">
-                            {turn.result.result.tool_trace.map((tool, index) => (
-                              <li key={`${tool}-${index}`}>{TOOL_TRACE_LABELS[tool] ?? tool}</li>
-                            ))}
-                          </ul>
-                        </details>
-                      )}
-                    </>
-                  )}
-                </section>
-              </article>
-            )
-          })}
+          )}
+          {history.map((turn) => (
+            <article key={turn.id} className="space-y-3">
+              <div
+                className="ml-auto max-w-[85%] rounded-2xl bg-accent px-4 py-2.5"
+                aria-label="Ihre Nachricht"
+              >
+                <p className="whitespace-pre-wrap text-sm">{turn.question}</p>
+              </div>
+              {turn.status === 'pending' && (
+                <div className="space-y-2" aria-label="Agent-Antwort">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              )}
+              {turn.status === 'error' && (
+                <div>
+                  <p className="text-sm text-[var(--warn)]">{turn.errorMessage}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-2"
+                    onClick={() => onRetry(turn)}
+                  >
+                    Erneut senden
+                  </Button>
+                </div>
+              )}
+              {turn.status === 'complete' && turn.result && (
+                <AgentResponse
+                  turn={turn}
+                  actions={actions}
+                  confirmPending={confirmPending}
+                  dismissPending={dismissPending}
+                  onConfirm={onConfirm}
+                  onDismiss={onDismiss}
+                />
+              )}
+            </article>
+          ))}
         </div>
-        <div className="sr-only" aria-live="polite">
-          {latestCompleteId ? 'Antwort des Evidenz-Copiloten abgeschlossen.' : ''}
-        </div>
-      </div>
+      </ScrollArea>
 
       <form
         className="shrink-0 border-t border-border bg-[var(--surface-raised)] p-4"
-        onSubmit={(event) => {
-          event.preventDefault()
+        onSubmit={(e) => {
+          e.preventDefault()
           onSubmit()
         }}
       >
-        <label htmlFor="agent-question" className="sr-only">Frage an den Evidenz-Copiloten</label>
-        <div className="relative">
+        <div className="rounded-xl border border-border bg-card p-3">
           <textarea
-            id="agent-question"
-            value={draft}
-            disabled={!analysisId}
+            value={question}
+            onChange={(e) => onQuestionChange(e.target.value)}
+            placeholder={analysisId ? 'Frage zu diesem Analyse-Lauf…' : 'Analyse starten, dann fragen'}
+            disabled={!analysisId || pending}
             rows={3}
-            maxLength={2000}
-            placeholder="Frage zu diesem Analyse-Lauf"
-            onChange={(event) => onDraftChange(event.target.value)}
-            className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2.5 pr-11 text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
+            className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                onSubmit()
+              }
+            }}
           />
-          <button
-            type="submit"
-            aria-label="Frage senden"
-            disabled={!analysisId || !draft.trim() || pending}
-            className="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
-          >
-            <CornerDownLeft className="size-4" />
-          </button>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+                {pageContextLabel}
+              </span>
+              <input
+                ref={fileRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.docx,.xlsx,.xls,.csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file && onUploadDocument) onUploadDocument(file)
+                  e.target.value = ''
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Dokument anhängen"
+                disabled={!onUploadDocument}
+                onClick={() => fileRef.current?.click()}
+              >
+                <Plus className="size-4" />
+              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon-xs" aria-label="Einstellungen">
+                    <Settings2 className="size-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-64 text-sm">
+                  <p className="font-medium">Integrationen</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {integrations?.connected
+                      ? 'Composio verbunden'
+                      : 'Composio nicht verbunden'}
+                  </p>
+                  {!integrations?.connected && (
+                    <Button type="button" size="sm" className="mt-3 w-full" onClick={onConnect}>
+                      Verbinden
+                    </Button>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button
+              type="submit"
+              size="icon"
+              className="rounded-full"
+              disabled={!analysisId || pending || !question.trim()}
+              aria-label="Senden"
+            >
+              <ArrowUp className="size-4" />
+            </Button>
+          </div>
         </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          Keine externe Aktion wird ohne Freigabe ausgeführt.
-        </p>
       </form>
+    </aside>
+  )
+}
+
+function AgentResponse({
+  turn,
+  actions,
+  confirmPending,
+  dismissPending,
+  onConfirm,
+  onDismiss,
+}: {
+  turn: AgentTurn
+  actions: ProposedAction[]
+  confirmPending: boolean
+  dismissPending: boolean
+  onConfirm: (id: number) => void
+  onDismiss: (id: number) => void
+}) {
+  const result = turn.result!.result
+  const proposed = (result.proposed_action_ids ?? [])
+    .map((id) => actions.find((a) => a.id === id))
+    .filter((a): a is ProposedAction => a != null)
+
+  return (
+    <div className="space-y-3" aria-label="Agent-Antwort">
+      <p className="whitespace-pre-wrap text-sm leading-relaxed">{result.answer}</p>
+      <CitationList citations={result.citations} />
+      {proposed.map((action) => (
+        <div key={action.id} className="rounded-md border border-border bg-card/50 p-3">
+          <p className="text-sm font-medium">
+            {ACTION_TYPE_LABELS[action.action_type] ?? action.action_type}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {action.status === 'draft' ? 'Entwurf' : action.status}
+          </p>
+          <p className="mt-1 text-sm">{actionSummary(action.payload)}</p>
+          {action.status === 'draft' && (
+            <div className="mt-2 flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => onDismiss(action.id)} disabled={dismissPending}>
+                Verwerfen
+              </Button>
+              <Button size="sm" onClick={() => onConfirm(action.id)} disabled={confirmPending}>
+                Freigeben
+              </Button>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

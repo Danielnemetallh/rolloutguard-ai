@@ -3,6 +3,8 @@
 @import '@fontsource-variable/geist';
 @import '@fontsource-variable/geist-mono';
 
+@custom-variant dark (&:is(.dark *));
+
 @theme {
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
@@ -10,61 +12,62 @@
 }
 
 :root {
-  --background: #f2f0ea;
-  --background: oklch(95.5% 0.009 85);
-  --surface-raised: #faf8f2;
-  --surface-raised: oklch(98% 0.008 85);
-  --foreground: #25272a;
-  --foreground: oklch(27% 0.012 255);
-  --card: #faf8f2;
-  --card: oklch(98% 0.008 85);
-  --card-foreground: #25272a;
-  --card-foreground: oklch(27% 0.012 255);
-  --primary: #172b45;
-  --primary: oklch(29% 0.055 252);
-  --primary-foreground: #f8f7f2;
-  --primary-foreground: oklch(97.5% 0.006 85);
-  --secondary: #e9e6dd;
-  --secondary: oklch(92.5% 0.01 85);
-  --secondary-foreground: #25272a;
-  --secondary-foreground: oklch(27% 0.012 255);
-  --muted: #e9e6dd;
-  --muted: oklch(92.5% 0.01 85);
-  --muted-foreground: #686765;
-  --muted-foreground: oklch(50% 0.012 75);
-  --accent: #e7ebef;
-  --accent: oklch(93% 0.014 250);
-  --accent-foreground: #172b45;
-  --accent-foreground: oklch(29% 0.055 252);
-  --selection: #e2e8ef;
-  --selection: oklch(91.5% 0.02 250);
-  --message-user: #e8edf2;
-  --message-user: oklch(93.5% 0.016 250);
-  --destructive: #a52828;
-  --destructive: oklch(47% 0.16 27);
-  --destructive-foreground: #f8f7f2;
-  --destructive-foreground: oklch(97.5% 0.006 85);
-  --border: #d6d2c8;
-  --border: oklch(86% 0.012 80);
-  --input: #cac6bc;
-  --input: oklch(82% 0.013 80);
-  --ring: #172b45;
-  --ring: oklch(38% 0.06 252);
+  --background: oklch(0.96 0.012 85);
+  --foreground: oklch(0.24 0.02 260);
+  --card: oklch(0.99 0.006 85);
+  --card-foreground: oklch(0.24 0.02 260);
+  --popover: oklch(0.99 0.006 85);
+  --popover-foreground: oklch(0.24 0.02 260);
+  --primary: oklch(0.48 0.12 275);
+  --primary-foreground: oklch(0.98 0.01 275);
+  --secondary: oklch(0.94 0.01 85);
+  --secondary-foreground: oklch(0.24 0.02 260);
+  --muted: oklch(0.94 0.01 85);
+  --muted-foreground: oklch(0.48 0.02 70);
+  --accent: oklch(0.93 0.02 275);
+  --accent-foreground: oklch(0.32 0.08 275);
+  --destructive: oklch(0.48 0.15 25);
+  --destructive-foreground: oklch(0.98 0.008 85);
+  --border: oklch(0.88 0.012 80);
+  --input: oklch(0.88 0.012 80);
+  --ring: oklch(0.48 0.12 275);
   --radius: 0.5rem;
-  --critical: #a52828;
-  --critical: oklch(47% 0.16 27);
-  --critical-bg: #f7e9e5;
-  --critical-bg: oklch(94% 0.025 28);
-  --warning: #8a6116;
-  --warning: oklch(51% 0.105 76);
-  --warn: var(--warning);
-  --warn-bg: #f6eedc;
-  --warn-bg: oklch(94% 0.035 82);
-  --success: #3e755c;
-  --success: oklch(50% 0.075 155);
-  --approved: var(--success);
-  --approved-bg: #e7f1e9;
-  --approved-bg: oklch(94% 0.028 150);
+  --critical: oklch(0.48 0.15 25);
+  --critical-bg: oklch(0.95 0.03 25);
+  --warn: oklch(0.55 0.12 70);
+  --warn-bg: oklch(0.96 0.03 80);
+  --approved: oklch(0.48 0.08 155);
+  --approved-bg: oklch(0.96 0.02 155);
+  --surface-raised: oklch(0.99 0.006 85);
+}
+
+.dark {
+  --background: oklch(0.14 0.015 275);
+  --foreground: oklch(0.93 0.01 275);
+  --card: oklch(0.17 0.018 275);
+  --card-foreground: oklch(0.93 0.01 275);
+  --popover: oklch(0.19 0.02 275);
+  --popover-foreground: oklch(0.93 0.01 275);
+  --primary: oklch(0.62 0.14 275);
+  --primary-foreground: oklch(0.98 0.01 275);
+  --secondary: oklch(0.22 0.02 275);
+  --secondary-foreground: oklch(0.93 0.01 275);
+  --muted: oklch(0.22 0.02 275);
+  --muted-foreground: oklch(0.62 0.02 275);
+  --accent: oklch(0.24 0.03 275);
+  --accent-foreground: oklch(0.93 0.01 275);
+  --destructive: oklch(0.55 0.16 25);
+  --destructive-foreground: oklch(0.98 0.01 275);
+  --border: oklch(0.26 0.02 275);
+  --input: oklch(0.26 0.02 275);
+  --ring: oklch(0.62 0.14 275);
+  --critical: oklch(0.62 0.16 25);
+  --critical-bg: oklch(0.22 0.04 25);
+  --warn: oklch(0.68 0.12 70);
+  --warn-bg: oklch(0.22 0.04 70);
+  --approved: oklch(0.62 0.08 155);
+  --approved-bg: oklch(0.2 0.03 155);
+  --surface-raised: oklch(0.17 0.018 275);
 }
 
 @theme inline {
@@ -72,6 +75,8 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -81,6 +86,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -99,8 +105,7 @@
     -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-background text-foreground m-0 min-h-dvh;
-    line-height: 1.6;
+    @apply bg-background text-foreground m-0 min-h-dvh text-[15px] leading-relaxed;
   }
   #root {
     @apply min-h-dvh;
@@ -110,76 +115,6 @@
   select,
   textarea {
     font: inherit;
-  }
-}
-
-.workbench-shell {
-  display: grid;
-  grid-template-columns: 224px minmax(0, 1fr) 400px;
-  min-height: 100dvh;
-}
-
-.workbench-shell.navigation-collapsed {
-  grid-template-columns: 72px minmax(0, 1fr) 400px;
-}
-
-.workbench-shell.agent-collapsed {
-  grid-template-columns: 224px minmax(0, 1fr) 56px;
-}
-
-.workbench-shell.navigation-collapsed.agent-collapsed {
-  grid-template-columns: 72px minmax(0, 1fr) 56px;
-}
-
-.workbench-navigation,
-.workbench-agent {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  height: 100dvh;
-  min-width: 0;
-}
-
-.nav-label {
-  opacity: 1;
-  transform: translateX(0);
-  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.navigation-collapsed .nav-label {
-  pointer-events: none;
-  position: absolute;
-  opacity: 0;
-  transform: translateX(-4px);
-}
-
-@media (max-width: 1279px) {
-  .workbench-shell,
-  .workbench-shell.navigation-collapsed,
-  .workbench-shell.agent-collapsed,
-  .workbench-shell.navigation-collapsed.agent-collapsed {
-    grid-template-columns: 72px minmax(0, 1fr);
-  }
-
-  .workbench-navigation .nav-label {
-    pointer-events: none;
-    position: absolute;
-    opacity: 0;
-    transform: translateX(-4px);
-  }
-
-  .workbench-agent {
-    position: fixed;
-    right: 0;
-    width: 400px;
-    max-width: calc(100vw - 72px);
-    box-shadow: -12px 0 30px oklch(20% 0.02 250 / 12%);
-  }
-
-  .agent-collapsed .workbench-agent {
-    width: 56px;
-    box-shadow: none;
   }
 }
 

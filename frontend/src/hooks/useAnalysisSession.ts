@@ -60,6 +60,7 @@ export function useAnalysisSession() {
       toast.success(`Analyse abgeschlossen: Lauf #${data.analysis_run_id}`)
       void qc.invalidateQueries({ queryKey: ['findings'] })
       void qc.invalidateQueries({ queryKey: ['analyses'] })
+      void qc.invalidateQueries({ queryKey: ['diff', data.analysis_run_id] })
     },
     onError: () => toast.error('Analyse fehlgeschlagen. Läuft die API?'),
   })
@@ -97,7 +98,9 @@ export function useAnalysisSession() {
   })
 
   const activeSummary = analyses.data?.analyses.find((a) => a.id === analysisId)
-  const kpis = activeSummary?.kpis ?? analyze.data?.kpis
+  const kpis =
+    activeSummary?.kpis ??
+    (analyze.data?.analysis_run_id === analysisId ? analyze.data.kpis : undefined)
 
   return {
     meta,
