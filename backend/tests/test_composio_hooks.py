@@ -14,6 +14,8 @@ def test_policy_auto_vs_ask_vs_block() -> None:
     assert policy_for("GOOGLECALENDAR_LIST_EVENTS") == "auto"
     assert policy_for("GMAIL_CREATE_EMAIL_DRAFT") == "ask"
     assert policy_for("GOOGLECALENDAR_DELETE_EVENT") == "ask"
+    assert policy_for("NOTION_CREATE_PAGE") == "auto"
+    assert policy_for("NOTION_UPDATE_PAGE") == "auto"
     assert policy_for("GMAIL_SEND_EMAIL") == "block"
     assert policy_for("SOME_UNKNOWN_TOOL") == "block"
 
@@ -40,6 +42,35 @@ def test_write_tool_pauses_for_permission() -> None:
         )
         assert result["status"] == "pending_permission"
         assert isinstance(result["proposed_action_id"], int)
+    finally:
+        db.close()
+
+
+def test_notion_write_runs_without_permission(monkeypatch) -> None:
+    client = TestClient(create_app())
+    project_id = client.get("/api/projects").json()[0]["id"]
+    analysis_id = client.post(f"/api/projects/{project_id}/analyze-synthetic").json()[
+        "analysis_run_id"
+    ]
+    from rolloutguard_api.ai import composio_hooks
+    from rolloutguard_api.db.session import SessionLocal
+
+    monkeypatch.setattr(
+        composio_hooks,
+        "execute_composio_tool",
+        lambda name, arguments: {"connected": True, "ok": True, "tool": name},
+    )
+    db = SessionLocal()
+    try:
+        result = run_composio_hook(
+            db,
+            name="NOTION_UPDATE_PAGE",
+            arguments={"title": "SLA", "content": "Forecast nach Fälligkeit."},
+            analysis_run_id=analysis_id,
+        )
+        assert result["connected"] is True
+        assert result["ok"] is True
+        assert "proposed_action_id" not in result
     finally:
         db.close()
 

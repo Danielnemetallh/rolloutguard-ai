@@ -7,6 +7,7 @@ The working endpoint is https://connect.composio.dev/mcp with x-consumer-api-key
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any
 
 import httpx
@@ -37,7 +38,11 @@ TOOL_SLUGS: dict[str, list[str]] = {
     "NOTION_SEARCH": ["NOTION_SEARCH_NOTION_PAGE", "NOTION_FETCH_DATA", "NOTION_SEARCH"],
     "NOTION_FETCH_DATA": ["NOTION_FETCH_DATA"],
     "NOTION_CREATE_PAGE": ["NOTION_CREATE_NOTION_PAGE", "NOTION_CREATE_PAGE"],
-    "NOTION_UPDATE_PAGE": ["NOTION_UPDATE_PAGE"],
+    "NOTION_UPDATE_PAGE": [
+        "NOTION_ADD_PAGE_CONTENT",
+        "NOTION_ADD_MULTIPLE_PAGE_CONTENT",
+        "NOTION_UPDATE_PAGE",
+    ],
 }
 
 
@@ -97,12 +102,20 @@ class ConnectMcpClient:
         self._api_key = api_key
         self._session_id: str | None = None
         self._rpc_id = 0
-        self._http = httpx.Client(timeout=45.0)
+        self._http = httpx.Client(timeout=12.0)
+        from rolloutguard_api.ai.cancel import watch_client_close
+
+        self._abort_watch: threading.Event = watch_client_close(self._http)
 
     def close(self) -> None:
+        if getattr(self, "_abort_watch", None) is not None:
+            self._abort_watch.set()
         self._http.close()
 
     def _rpc(self, method: str, params: dict[str, Any] | None = None) -> Any:
+        from rolloutguard_api.ai.cancel import raise_if_cancelled
+
+        raise_if_cancelled()
         self._rpc_id += 1
         body: dict[str, Any] = {"jsonrpc": "2.0", "id": self._rpc_id, "method": method}
         if params is not None:
@@ -188,6 +201,47 @@ def map_tool_arguments(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     if name in {"NOTION_SEARCH", "NOTION_SEARCH_NOTION_PAGE"}:
         query = args.get("query") or args.get("query_string") or args.get("search") or ""
         return {"query": query}
+    if name in {"NOTION_CREATE_PAGE", "NOTION_CREATE_NOTION_PAGE"}:
+        parent = (
+            args.get("parent_id")
+            or args.get("parent_page_id")
+            or args.get("database_id")
+            or args.get("page_id")
+            or ""
+        )
+        mapped = {
+            "title": args.get("title") or "Ausnahme",
+            "parent_id": parent,
+        }
+        markdown = args.get("markdown") or args.get("content") or args.get("body") or ""
+        if markdown:
+            mapped["markdown"] = markdown
+        return mapped
+    if name in {
+        "NOTION_ADD_PAGE_CONTENT",
+        "NOTION_ADD_MULTIPLE_PAGE_CONTENT",
+    }:
+        page = args.get("page_id") or args.get("parent_block_id") or args.get("parent_id") or ""
+        body = (
+            args.get("content")
+            or args.get("markdown")
+            or args.get("body")
+            or args.get("title")
+            or ""
+        )
+        return {
+            "parent_block_id": page,
+            "page_id": page,
+            "content": body,
+        }
+    if name == "NOTION_UPDATE_PAGE":
+        page = args.get("page_id") or args.get("parent_id") or ""
+        title = args.get("title") or "RolloutGuard"
+        return {
+            "page_id": page,
+            "properties": args.get("properties")
+            or {"title": {"title": [{"text": {"content": title}}]}},
+        }
     return args
 
 
@@ -344,18 +398,26 @@ def _normalize_app_result(name: str, result: Any) -> dict[str, Any]:
 
 
 def execute_connect_tool(name: str, arguments: dict[str, Any], *, api_key: str) -> Any:
+    from rolloutguard_api.ai.cancel import raise_if_cancelled
+
     slugs = TOOL_SLUGS.get(name, [name])
-    mapped = map_tool_arguments(name, arguments)
     client = ConnectMcpClient(api_key)
     last_error: Exception | None = None
     try:
+        raise_if_cancelled()
         client.initialize()
         for slug in slugs:
+            raise_if_cancelled()
             try:
+                mapped = map_tool_arguments(slug, arguments)
                 result = _multi_execute(client, slug, mapped)
                 log.info("composio_connect_ok", tool=name, slug=slug)
                 return _normalize_app_result(name, result)
             except Exception as exc:  # noqa: BLE001
+                from rolloutguard_api.ai.cancel import AgentCancelled
+
+                if isinstance(exc, AgentCancelled):
+                    raise
                 last_error = exc
                 log.warning("composio_connect_slug_failed", tool=name, slug=slug)
                 if "No active connection" in str(exc):

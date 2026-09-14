@@ -105,7 +105,7 @@ export type AgentTurn = {
   id: string
   analysisRunId: number
   question: string
-  status: 'pending' | 'complete' | 'error'
+  status: 'pending' | 'complete' | 'error' | 'cancelled'
   result?: AgentResult
 }
 

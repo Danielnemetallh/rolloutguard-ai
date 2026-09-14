@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     composio_api_key: str = ""
     composio_user_id: str = "demo-analystin"
     composio_notion_database_id: str = ""
+    composio_notion_page_id: str = ""
     upload_dir: Path = Path("../data/uploads")
     synthetic_dir: Path = Path("../data/synthetic")
     cors_origins: str = "http://localhost:5173"

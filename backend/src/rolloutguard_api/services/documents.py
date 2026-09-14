@@ -15,7 +15,7 @@ from rolloutguard_api.core.config import get_settings
 from rolloutguard_api.db import models
 from rolloutguard_api.services.ingest import IngestError
 
-ALLOWED_DOC_SUFFIXES = {".pdf", ".docx", ".txt", ".md"}
+ALLOWED_DOC_SUFFIXES = {".pdf", ".docx", ".txt", ".md", ".xlsx", ".xlsm"}
 MAX_DOC_BYTES = 25 * 1024 * 1024
 
 EXTRACT_SYSTEM = (
@@ -27,7 +27,14 @@ EXTRACT_SYSTEM = (
 
 
 def _kind_for(suffix: str) -> str:
-    return {".pdf": "pdf", ".docx": "docx", ".txt": "text", ".md": "text"}[suffix]
+    return {
+        ".pdf": "pdf",
+        ".docx": "docx",
+        ".txt": "text",
+        ".md": "text",
+        ".xlsx": "xlsx",
+        ".xlsm": "xlsx",
+    }[suffix]
 
 
 def extract_text(path: Path) -> str:
@@ -44,6 +51,21 @@ def extract_text(path: Path) -> str:
 
         doc = DocxDocument(str(path))
         return "\n".join(p.text for p in doc.paragraphs)
+    if suffix in {".xlsx", ".xlsm"}:
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(path, read_only=True, data_only=True)
+        lines: list[str] = []
+        for sheet in workbook.worksheets[:3]:
+            lines.append(f"Blatt {sheet.title}")
+            for index, row in enumerate(sheet.iter_rows(values_only=True)):
+                if index > 40:
+                    break
+                cells = [str(cell) for cell in row if cell is not None]
+                if cells:
+                    lines.append(" ".join(cells))
+        workbook.close()
+        return "\n".join(lines)
     raise IngestError("UNSUPPORTED_FILE_TYPE", "Dieser Dateityp wird nicht unterstützt.")
 
 
@@ -97,7 +119,7 @@ def ingest_document(
     if suffix not in ALLOWED_DOC_SUFFIXES:
         raise IngestError(
             "UNSUPPORTED_FILE_TYPE",
-            "Erlaubt sind PDF, DOCX, TXT und Markdown.",
+            "Erlaubt sind PDF, DOCX, TXT, Markdown und Excel (.xlsx).",
             {"filename": original_name, "suffix": suffix},
         )
     if path.stat().st_size > MAX_DOC_BYTES:

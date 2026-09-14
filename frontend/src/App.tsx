@@ -57,6 +57,7 @@ function Shell() {
           onDraftChange={wb.questionChange}
           onSubmit={(question) => wb.submitQuestion(question, viewport)}
           onRetry={(turnId) => wb.retryQuestion(turnId, viewport)}
+          onStop={wb.stopQuestion}
           onConfirmAction={wb.confirmAction}
           onDismissAction={wb.dismissAction}
           actionMutationPending={wb.actionMutationPending}
