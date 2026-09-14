@@ -1,10 +1,11 @@
-import { Bot, CornerDownLeft, Crosshair, History, Paperclip, RotateCcw, SquarePen, X } from 'lucide-react'
+import { Bot, CornerDownLeft, Crosshair, History, Paperclip, RotateCcw, Square, SquarePen, X } from 'lucide-react'
 import { useMemo, useRef } from 'react'
 import { AgentSessionHistory } from '@/components/AgentSessionHistory'
 import { CitationList } from '@/components/CitationList'
 import { PermissionPrompt } from '@/components/PermissionPrompt'
 import { Button } from '@/components/ui/button'
 import type { AgentViewportContext } from '@/hooks/useAgentViewportContext'
+import { starterPrompts } from '@/lib/agentQuestions'
 import type { AgentSessionSummary, AgentTurn, ProposedAction } from '@/types'
 
 type AgentSidebarProps = {
@@ -26,6 +27,7 @@ type AgentSidebarProps = {
   onDraftChange: (value: string) => void
   onSubmit: (question?: string) => void
   onRetry: (turnId: string) => void
+  onStop?: () => void
   onConfirmAction: (actionId: number) => void
   onDismissAction?: (actionId: number) => void
   actionMutationPending?: boolean
@@ -54,6 +56,7 @@ export function AgentSidebar({
   onDraftChange,
   onSubmit,
   onRetry,
+  onStop,
   onConfirmAction,
   onDismissAction,
   actionMutationPending = false,
@@ -146,9 +149,26 @@ export function AgentSidebar({
         <>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5" aria-label="Agent-Unterhaltung">
             {turns.length === 0 && (
-              <p className="max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
-                Fragen Sie nach Befunden, Dokumenten, Kalender oder nächsten Schritten.
-              </p>
+              <div className="space-y-3">
+                <p className="max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
+                  Fragen Sie nach Befunden, Dokumenten, Kalender oder nächsten Schritten.
+                </p>
+                {analysisId != null && (
+                  <ul className="flex flex-wrap gap-1.5">
+                    {starterPrompts(viewport).map((prompt) => (
+                      <li key={prompt}>
+                        <button
+                          type="button"
+                          onClick={() => onSubmit(prompt)}
+                          className="max-w-full rounded-full border border-border bg-[var(--surface-subtle)] px-2.5 py-1 text-left text-[11px] leading-snug text-muted-foreground hover:border-primary/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+                        >
+                          {prompt}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
 
             <div className="space-y-7">
@@ -177,9 +197,24 @@ export function AgentSidebar({
                       </p>
                       {turn.status === 'pending' && (
                         <div className="space-y-2" aria-label="Antwort wird erstellt">
-                          <span className="text-xs text-muted-foreground">Antwort wird erstellt</span>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-xs text-muted-foreground">Antwort wird erstellt</span>
+                            {onStop && (
+                              <Button type="button" size="sm" variant="outline" onClick={onStop}>
+                                <Square className="size-3.5 fill-current" aria-hidden="true" /> Anhalten
+                              </Button>
+                            )}
+                          </div>
                           <div className="h-3 w-4/5 animate-pulse rounded bg-muted" />
                           <div className="h-3 w-3/5 animate-pulse rounded bg-muted" />
+                        </div>
+                      )}
+                      {turn.status === 'cancelled' && (
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm text-muted-foreground">Antwort angehalten.</p>
+                          <Button size="sm" variant="outline" onClick={() => onRetry(turn.id)}>
+                            <RotateCcw className="size-3.5" /> Wiederholen
+                          </Button>
                         </div>
                       )}
                       {turn.status === 'error' && (
@@ -195,6 +230,11 @@ export function AgentSidebar({
                           <p className="whitespace-pre-wrap text-sm leading-relaxed">
                             {turn.result.result.answer}
                           </p>
+                          {turn.result.result.abstained && (
+                            <Button size="sm" variant="outline" className="mt-2" onClick={() => onRetry(turn.id)}>
+                              <RotateCcw className="size-3.5" /> Wiederholen
+                            </Button>
+                          )}
                           <CitationList
                             citations={turn.result.result.citations ?? []}
                             onEvidenceSelect={onEvidenceSelect}
@@ -229,6 +269,10 @@ export function AgentSidebar({
             className="shrink-0 bg-[var(--surface-raised)] p-4 pt-2"
             onSubmit={(event) => {
               event.preventDefault()
+              if (pending) {
+                onStop?.()
+                return
+              }
               onSubmit()
             }}
           >
@@ -277,14 +321,26 @@ export function AgentSidebar({
                 >
                   <Paperclip className="size-4" aria-hidden="true" />
                 </button>
-                <button
-                  type="submit"
-                  aria-label="Frage senden"
-                  disabled={!analysisId || !draft.trim() || pending}
-                  className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
-                >
-                  <CornerDownLeft className="size-4" />
-                </button>
+                {pending ? (
+                  <button
+                    type="button"
+                    aria-label="Antwort anhalten"
+                    onClick={onStop}
+                    disabled={!onStop}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
+                  >
+                    <Square className="size-3.5 fill-current" aria-hidden="true" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    aria-label="Frage senden"
+                    disabled={!analysisId || !draft.trim()}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
+                  >
+                    <CornerDownLeft className="size-4" />
+                  </button>
+                )}
               </div>
             </div>
           </form>

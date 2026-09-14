@@ -26,6 +26,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       analysisId: session.analysisId,
       projectId: session.projectId,
       analyzePending: session.analyzePending,
+      importPending: session.importPending,
       exportPending: session.exportPending,
       kpis: session.kpis,
       diff: session.diff,
@@ -49,6 +50,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       askResult: agent.askResult,
       history: agent.history,
       retryQuestion: agent.retryQuestion,
+      stopQuestion: agent.stopQuestion,
       startNewAgentSession: agent.startNewSession,
       loadAgentHistory: () => {
         void agent.loadSessionHistory()
@@ -83,6 +85,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       pendingActionCount: proposedActions.pendingActionCount,
       actionMutationPending: proposedActions.actionMutationPending,
       onAnalyze: () => session.onAnalyze(() => setStatusOverrides({})),
+      onImportWorkbooks: (files, onSuccess) =>
+        session.onImportWorkbooks(files, () => {
+          setStatusOverrides({})
+          onSuccess?.()
+        }),
       onExport: session.onExport,
       onSelectRun: (id) => {
         session.setAnalysisId(id)

@@ -32,6 +32,62 @@ def test_map_calendar_list_arguments() -> None:
     assert "site_id" not in mapped
 
 
+def test_map_notion_create_uses_parent_and_markdown() -> None:
+    mapped = map_tool_arguments(
+        "NOTION_CREATE_NOTION_PAGE",
+        {
+            "title": "SLA DE-NRW-0107",
+            "content": "Forecast nach Fälligkeit.",
+            "database_id": "parent-db",
+            "site_id": "DE-NRW-0107",
+        },
+    )
+    assert mapped["parent_id"] == "parent-db"
+    assert mapped["title"] == "SLA DE-NRW-0107"
+    assert mapped["markdown"] == "Forecast nach Fälligkeit."
+    assert "site_id" not in mapped
+
+
+def test_map_notion_add_content_uses_page_id() -> None:
+    mapped = map_tool_arguments(
+        "NOTION_ADD_PAGE_CONTENT",
+        {"page_id": "assigned-page", "content": "## Ausnahme\n\nFibre nicht bereit."},
+    )
+    assert mapped["parent_block_id"] == "assigned-page"
+    assert mapped["content"].startswith("## Ausnahme")
+
+
+def test_prepare_notion_write_targets_configured_page(monkeypatch) -> None:
+    from rolloutguard_api.core.config import get_settings
+    from rolloutguard_api.integrations.composio_executor import prepare_notion_write
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("COMPOSIO_NOTION_PAGE_ID", "demo-page-id")
+    get_settings.cache_clear()
+    name, args = prepare_notion_write(
+        "NOTION_CREATE_PAGE",
+        {"title": "SLA-001", "content": "Forecast nach Fälligkeit."},
+    )
+    assert name == "NOTION_UPDATE_PAGE"
+    assert args["page_id"] == "demo-page-id"
+    assert "Forecast nach Fälligkeit" in args["content"]
+    get_settings.cache_clear()
+
+
+def test_prepare_notion_write_uses_database_uuid_as_page(monkeypatch) -> None:
+    from rolloutguard_api.core.config import get_settings
+    from rolloutguard_api.integrations.composio_executor import prepare_notion_write
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("COMPOSIO_NOTION_PAGE_ID", "")
+    monkeypatch.setenv("COMPOSIO_NOTION_DATABASE_ID", "598337872cf94fdf8782e53db20768a5")
+    get_settings.cache_clear()
+    name, args = prepare_notion_write("NOTION_CREATE_PAGE", {"title": "Karte"})
+    assert name == "NOTION_UPDATE_PAGE"
+    assert args["page_id"] == "598337872cf94fdf8782e53db20768a5"
+    get_settings.cache_clear()
+
+
 def test_connect_key_does_not_use_backend_sdk(monkeypatch) -> None:
     from rolloutguard_api.core.config import get_settings
     from rolloutguard_api.integrations import composio_connect, composio_executor

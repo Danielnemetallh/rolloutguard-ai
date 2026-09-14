@@ -19,7 +19,9 @@ from rolloutguard_api.services.analysis import (
     findings_to_dicts,
     list_analysis_runs,
     run_analysis_from_paths,
+    workbook_paths_for_analysis,
 )
+from rolloutguard_api.services.documents import ingest_document
 from rolloutguard_api.services.export import export_analysis
 from rolloutguard_api.services.ingest import IngestError, profile_workbook
 from rolloutguard_api.services.reconcile import reconcile
@@ -116,9 +118,10 @@ def get_analysis_diff(analysis_id: int, db: Session = Depends(get_db)) -> dict[s
 @router.post("/projects/{project_id}/imports")
 async def upload_imports(
     project_id: int,
-    contract: UploadFile = File(...),
-    schedule: UploadFile = File(...),
-    status: UploadFile = File(...),
+    contract: UploadFile | None = File(None),
+    schedule: UploadFile | None = File(None),
+    status: UploadFile | None = File(None),
+    files: list[UploadFile] | None = File(None),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     ensure_demo_project(db)
@@ -129,25 +132,84 @@ async def upload_imports(
     upload_root = Path(settings.upload_dir) / "incoming"
     upload_root.mkdir(parents=True, exist_ok=True)
 
-    async def _save(upload: UploadFile, name: str) -> Path:
-        suffix = Path(upload.filename or name).suffix.lower()
-        if suffix != ".xlsx":
+    async def _save(upload: UploadFile, fallback_name: str) -> tuple[Path, str]:
+        original = upload.filename or fallback_name
+        content = await upload.read()
+        suffix = Path(original).suffix.lower()
+        content_type = (upload.content_type or "").lower()
+        looks_xlsx = (
+            suffix in {".xlsx", ".xlsm"}
+            or content[:2] == b"PK"
+            or "spreadsheetml" in content_type
+            or content_type == "application/vnd.ms-excel"
+        )
+        if not looks_xlsx:
             raise AppError(
                 "UNSUPPORTED_FILE_TYPE",
-                "Nur .xlsx-Dateien sind für Vertrag, Terminplan und Status erlaubt.",
-                details={"file": name},
+                "Nur Excel-Arbeitsmappen (.xlsx) können abgeglichen werden.",
+                details={"file": original},
             )
-        dest = upload_root / name
-        content = await upload.read()
+        stem = Path(original).stem or "workbook"
+        dest = upload_root / f"{stem}.xlsx"
         dest.write_bytes(content)
-        return dest
+        return dest, original
+
+    uploads: dict[str, Path] = {}
+    originals: list[tuple[Path, str]] = []
+
+    named = {"contract": contract, "schedule": schedule, "status": status}
+    for slot, upload in named.items():
+        if upload is None or not upload.filename:
+            continue
+        path, original_name = await _save(upload, f"{slot}.xlsx")
+        uploads[slot] = path
+        originals.append((path, original_name))
+
+    for upload in files or []:
+        if upload is None or not (upload.filename or "").strip():
+            continue
+        path, original_name = await _save(upload, upload.filename or "workbook.xlsx")
+        slot = _workbook_slot_from_name(original_name)
+        if slot is None or slot in uploads:
+            slot = next(
+                (key for key in ("contract", "schedule", "status") if key not in uploads),
+                None,
+            )
+        if slot is None:
+            continue
+        uploads[slot] = path
+        originals.append((path, original_name))
+
+    if not uploads:
+        raise AppError("NO_WORKBOOKS", "Keine Excel-Datei empfangen.", status_code=400)
+
+    listed: list[str] = []
+    try:
+        for path, filename in originals:
+            display = filename if Path(filename).suffix else f"{Path(filename).stem}.xlsx"
+            ingest_document(db, project_id=project_id, path=path, original_name=display)
+            listed.append(display)
+        db.commit()
+    except IngestError as exc:
+        raise AppError(exc.code, exc.message, details=exc.details) from exc
+
+    synth = Path(settings.synthetic_dir)
+    defaults = {
+        "contract": synth / "contract_obligations.xlsx",
+        "schedule": synth / "partner_schedule.xlsx",
+        "status": synth / "site_project_status.xlsx",
+    }
+    paths = {**defaults, **uploads}
+    missing = [key for key, path in paths.items() if not path.exists()]
+    if missing:
+        raise AppError(
+            "SYNTHETIC_MISSING",
+            "Synthetische Arbeitsmappen fehlen. scripts/generate-synthetic.ps1 ausführen.",
+            status_code=404,
+            details={"missing": missing},
+        )
 
     try:
-        paths = {
-            "contract": await _save(contract, "contract_obligations.xlsx"),
-            "schedule": await _save(schedule, "partner_schedule.xlsx"),
-            "status": await _save(status, "site_project_status.xlsx"),
-        }
         run, analysis, sites = run_analysis_from_paths(db, paths, project_id=project_id)
     except IngestError as exc:
         raise AppError(exc.code, exc.message, details=exc.details) from exc
@@ -157,7 +219,22 @@ async def upload_imports(
         "batch_id": run.batch_id,
         "kpis": analysis.kpis,
         "site_count": len(sites),
+        "imported_files": listed,
+        "filled_from_synthetic": [key for key in defaults if key not in uploads],
     }
+
+
+def _workbook_slot_from_name(filename: str) -> str | None:
+    name = filename.lower()
+    if any(token in name for token in ("contract", "obligation", "vertrag")):
+        return "contract"
+    if any(token in name for token in ("schedule", "partner", "termin")):
+        return "schedule"
+    if any(token in name for token in ("status", "standort", "kaggle_site")):
+        return "status"
+    if "site_project" in name or "project_status" in name:
+        return "status"
+    return None
 
 
 @router.get("/analyses/{analysis_id}")
@@ -204,14 +281,8 @@ def site_timeline(
     analysis_id: int | None = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """Rebuild timeline from latest (or specified) analysis findings + synthetic re-profile."""
-    settings = get_settings()
-    synth = Path(settings.synthetic_dir)
-    paths = {
-        "contract": synth / "contract_obligations.xlsx",
-        "schedule": synth / "partner_schedule.xlsx",
-        "status": synth / "site_project_status.xlsx",
-    }
+    """Rebuild timeline from the selected run's workbooks, with synthetic fallback."""
+    paths = workbook_paths_for_analysis(db, analysis_id)
     if not all(p.exists() for p in paths.values()):
         raise AppError("SYNTHETIC_MISSING", "Synthetische Daten fehlen", status_code=404)
 

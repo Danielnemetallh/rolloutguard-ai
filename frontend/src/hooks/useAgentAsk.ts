@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { AgentViewportContext } from '@/hooks/useAgentViewportContext'
 import { API_BASE } from '@/lib/api'
@@ -62,13 +62,19 @@ export function useAgentAsk(analysisId: number | null) {
   )
   const draft = analysisId == null ? '' : (draftsByRun[analysisId] ?? '')
   const sessionId = analysisId == null ? undefined : sessionIdByRun[analysisId]
+  const abortRef = useRef<AbortController | null>(null)
+  const inflightRef = useRef<{ turnId: string; analysisRunId: number } | null>(null)
 
   const updateTurn = useCallback((analysisRunId: number, turnId: string, update: Partial<AgentTurn>) => {
     setTurnsByRun((current) => ({
       ...current,
-      [analysisRunId]: (current[analysisRunId] ?? []).map((turn) =>
-        turn.id === turnId ? { ...turn, ...update } : turn,
-      ),
+      [analysisRunId]: (current[analysisRunId] ?? []).map((turn) => {
+        if (turn.id !== turnId) return turn
+        if (turn.status !== 'pending' && update.status && update.status !== 'pending') {
+          return turn
+        }
+        return { ...turn, ...update }
+      }),
     }))
   }, [])
 
@@ -79,13 +85,19 @@ export function useAgentAsk(analysisId: number | null) {
     activeSessionId?: string,
     viewport?: AgentViewportContext,
   ) => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    inflightRef.current = { turnId, analysisRunId }
     try {
       const response = await fetch(`${API_BASE}/api/assistant/queries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           analysis_run_id: analysisRunId,
           question,
+          client_request_id: turnId,
           ...(activeSessionId ? { session_id: activeSessionId } : {}),
           ...(viewport
             ? {
@@ -102,12 +114,23 @@ export function useAgentAsk(analysisId: number | null) {
       })
       if (!response.ok) throw new Error(await response.text())
       const result = (await response.json()) as AgentResult
+      if (controller.signal.aborted) return
       if (result.session_id) {
         setSessionIdByRun((current) => ({ ...current, [analysisRunId]: result.session_id as string }))
       }
       updateTurn(analysisRunId, turnId, { status: 'complete', result })
-    } catch {
-      updateTurn(analysisRunId, turnId, { status: 'error', result: undefined })
+    } catch (error) {
+      const aborted =
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === 'AbortError') ||
+        (error instanceof Error && error.name === 'AbortError')
+      updateTurn(analysisRunId, turnId, {
+        status: aborted ? 'cancelled' : 'error',
+        result: undefined,
+      })
+    } finally {
+      if (inflightRef.current?.turnId === turnId) inflightRef.current = null
+      if (abortRef.current === controller) abortRef.current = null
     }
   }, [updateTurn])
 
@@ -142,8 +165,40 @@ export function useAgentAsk(analysisId: number | null) {
     void sendQuestion(analysisId, turn.question, turnId, sessionIdByRun[analysisId], viewport)
   }, [analysisId, sendQuestion, sessionIdByRun, turnsByRun, updateTurn])
 
+  const notifyServerCancel = useCallback((analysisRunId: number, turnId?: string) => {
+    void fetch(`${API_BASE}/api/assistant/queries/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
+        analysis_run_id: analysisRunId,
+        ...(turnId ? { client_request_id: turnId } : {}),
+      }),
+    }).catch(() => undefined)
+  }, [])
+
+  const stopQuestion = useCallback(() => {
+    const inflight = inflightRef.current
+    abortRef.current?.abort()
+    abortRef.current = null
+    inflightRef.current = null
+    if (analysisId == null) return
+    setTurnsByRun((current) => ({
+      ...current,
+      [analysisId]: (current[analysisId] ?? []).map((turn) =>
+        turn.status === 'pending' ? { ...turn, status: 'cancelled' as const, result: undefined } : turn,
+      ),
+    }))
+    notifyServerCancel(analysisId, inflight?.turnId)
+  }, [analysisId, notifyServerCancel])
+
   const startNewSession = useCallback(() => {
     if (analysisId == null) return
+    const inflight = inflightRef.current
+    abortRef.current?.abort()
+    abortRef.current = null
+    inflightRef.current = null
+    if (inflight) notifyServerCancel(inflight.analysisRunId, inflight.turnId)
     setHistoryOpen(false)
     void (async () => {
       try {
@@ -161,7 +216,7 @@ export function useAgentAsk(analysisId: number | null) {
         toast.error('Neue Sitzung konnte nicht angelegt werden.')
       }
     })()
-  }, [analysisId])
+  }, [analysisId, notifyServerCancel])
 
   const loadSessionHistory = useCallback(async () => {
     if (analysisId == null) return
@@ -237,6 +292,7 @@ export function useAgentAsk(analysisId: number | null) {
     },
     submitQuestion,
     retryQuestion,
+    stopQuestion,
     startNewSession,
     loadSessionHistory,
     resumeSession,
@@ -255,6 +311,7 @@ export function useAgentAsk(analysisId: number | null) {
     savedSessions,
     sessionId,
     startNewSession,
+    stopQuestion,
     submitQuestion,
     turns,
   ])

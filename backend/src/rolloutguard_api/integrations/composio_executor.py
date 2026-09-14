@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from pathlib import Path
@@ -233,19 +235,54 @@ def bootstrap_composio() -> None:
         log.warning("composio_bootstrap_failed", error=type(exc).__name__)
 
 
-def _notion_arguments(payload: dict[str, Any]) -> dict[str, Any]:
+def _looks_like_notion_id(value: str) -> bool:
+    compact = value.replace("-", "")
+    return len(compact) == 32 and all(char in "0123456789abcdefABCDEF" for char in compact)
+
+
+def prepare_notion_write(name: str, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Point Notion writes at the assigned demo page, or create under a parent."""
     settings = get_settings()
-    args: dict[str, Any] = {
-        "title": payload.get("title") or "Ausnahme",
-        "content": payload.get("body") or payload.get("description") or "",
+    configured_page = settings.composio_notion_page_id.strip()
+    configured_parent = settings.composio_notion_database_id.strip()
+    if not configured_page and _looks_like_notion_id(configured_parent):
+        configured_page = configured_parent
+    page_id = str(payload.get("page_id") or configured_page or "").strip()
+    parent = str(
+        payload.get("parent_id")
+        or payload.get("parent_page_id")
+        or payload.get("database_id")
+        or configured_parent
+        or page_id
+        or ""
+    ).strip()
+    title = str(payload.get("title") or "Ausnahme")
+    body = str(
+        payload.get("markdown")
+        or payload.get("content")
+        or payload.get("body")
+        or payload.get("description")
+        or ""
+    )
+    markdown = body if body.lstrip().startswith("#") else f"## {title}\n\n{body}".strip()
+    if page_id and ("UPDATE" in name or "CREATE" in name):
+        return "NOTION_UPDATE_PAGE", {
+            "page_id": page_id,
+            "parent_block_id": page_id,
+            "content": markdown,
+            "title": title,
+        }
+    return "NOTION_CREATE_PAGE", {
+        "title": title,
+        "parent_id": parent,
+        "markdown": markdown,
+        "content": markdown,
+        "database_id": parent,
     }
-    if settings.composio_notion_database_id.strip():
-        args["database_id"] = settings.composio_notion_database_id.strip()
-    return args
 
 
 def _tool_arguments(payload: dict[str, Any]) -> dict[str, Any]:
-    skip = {"composio_tool", "site_id", "title", "milestone_kind"}
+    skip = {"composio_tool", "site_id", "milestone_kind"}
     return {key: value for key, value in payload.items() if key not in skip and value is not None}
 
 
@@ -299,13 +336,46 @@ def _tools_execute(name: str, arguments: dict[str, Any]) -> Any:
     )
 
 
+def _tools_execute_bounded(name: str, arguments: dict[str, Any], timeout_s: float = 15.0) -> Any:
+    from contextvars import copy_context
+
+    from rolloutguard_api.ai.cancel import AgentCancelled, raise_if_cancelled
+
+    raise_if_cancelled()
+    executor = ThreadPoolExecutor(max_workers=1)
+    ctx = copy_context()
+    future = executor.submit(ctx.run, _tools_execute, name, arguments)
+    try:
+        waited = 0.0
+        step = 0.15
+        while True:
+            raise_if_cancelled()
+            remaining = timeout_s - waited
+            if remaining <= 0:
+                log.warning("composio_tool_timeout", tool=name)
+                raise TimeoutError("composio_tool_timeout")
+            try:
+                return future.result(timeout=min(step, remaining))
+            except FutureTimeout:
+                waited += step
+    except AgentCancelled:
+        raise
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def execute_composio_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
     """Run a named Composio tool via connected accounts (reads, or writes after Freigeben)."""
+    from rolloutguard_api.ai.cancel import AgentCancelled, raise_if_cancelled
+
+    raise_if_cancelled()
     args = arguments or {}
+    if "NOTION" in name and any(token in name for token in ("CREATE", "UPDATE", "ADD")):
+        name, args = prepare_notion_write(name, args)
     if not _composio_configured():
         return _read_fallback(name)
     try:
-        result = _tools_execute(name, args)
+        result = _tools_execute_bounded(name, args)
         if isinstance(result, dict) and result.get("connected") is False:
             return {**result, "channel": "composio"}
         coerced = _coerce_json(result)
@@ -318,6 +388,8 @@ def execute_composio_tool(name: str, arguments: dict[str, Any] | None = None) ->
             "connected": True,
             "result": coerced,
         }
+    except AgentCancelled:
+        raise
     except Exception as exc:  # noqa: BLE001
         log.warning("composio_tool_failed", tool=name, error=type(exc).__name__)
         return _read_fallback(name)
@@ -360,7 +432,11 @@ def _composio_execute(action: models.ProposedAction) -> dict[str, Any]:
         )
         return {"channel": "composio", "result": _coerce_json(result)}
     if action.action_type in {"board", "task"}:
-        result = _tools_execute("NOTION_CREATE_PAGE", _notion_arguments(payload))
+        name, args = prepare_notion_write(
+            str((action.payload_json or {}).get("composio_tool") or "NOTION_CREATE_PAGE"),
+            action.payload_json or {},
+        )
+        result = _tools_execute(name, args)
         board = _write_board(action)
         return {"channel": "composio", "result": _coerce_json(result), "in_app": board}
     return _file_fallback(action)

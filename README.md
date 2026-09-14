@@ -50,7 +50,7 @@ cd ..\frontend; npm ci
 .\scripts\dev-web.ps1
 ```
 
-5. Open http://localhost:5173 — API docs at http://127.0.0.1:8000/docs
+5. Open http://localhost:5173 — API docs at http://127.0.0.1:8001/docs
 
 The demo UI is in **German**; API paths and rule IDs stay English.
 

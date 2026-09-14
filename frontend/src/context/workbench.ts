@@ -35,6 +35,7 @@ export type WorkbenchContextValue = {
   analysisId: number | null
   projectId: number | undefined
   analyzePending: boolean
+  importPending: boolean
   exportPending: boolean
   kpis: Record<string, number> | undefined
   diff: Diff | undefined
@@ -66,6 +67,7 @@ export type WorkbenchContextValue = {
   askResult: AgentResult | undefined
   history: AgentTurn[]
   retryQuestion: (turnId: string, viewport?: AgentViewportContext) => void
+  stopQuestion: () => void
   startNewAgentSession: () => void
   loadAgentHistory: () => void
   resumeAgentSession: (sessionId: string) => void
@@ -92,6 +94,7 @@ export type WorkbenchContextValue = {
   pendingActionCount: number
   actionMutationPending: boolean
   onAnalyze: () => void
+  onImportWorkbooks: (files: File[], onSuccess?: () => void) => void
   onExport: () => void
   onSelectRun: (id: number) => void
   onSearchChange: (value: string) => void

@@ -236,6 +236,34 @@ def run_analysis_from_paths(
     return run, analysis, sites
 
 
+def synthetic_workbook_paths() -> dict[str, Path]:
+    synth = Path(get_settings().synthetic_dir)
+    return {
+        "contract": synth / "contract_obligations.xlsx",
+        "schedule": synth / "partner_schedule.xlsx",
+        "status": synth / "site_project_status.xlsx",
+    }
+
+
+def workbook_paths_for_analysis(db: Session, analysis_id: int | None) -> dict[str, Path]:
+    """Prefer the selected run's stored workbooks; fill gaps from synthetic files."""
+    paths = synthetic_workbook_paths()
+    if analysis_id is None:
+        return paths
+    run = db.get(models.AnalysisRun, analysis_id)
+    if run is None:
+        return paths
+    files = db.query(models.SourceFile).filter_by(batch_id=run.batch_id).all()
+    for source in files:
+        kind = source.logical_type
+        if kind not in paths:
+            continue
+        stored = Path(source.storage_key)
+        if stored.is_file():
+            paths[kind] = stored
+    return paths
+
+
 def list_analysis_runs(db: Session, project_id: int) -> list[models.AnalysisRun]:
     # Ordered by primary key rather than created_at: inserts are strictly
     # sequential (single writer per run), and id avoids timestamp-resolution

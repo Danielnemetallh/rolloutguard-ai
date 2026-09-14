@@ -16,6 +16,25 @@ from rolloutguard_api.core.logging import get_logger
 log = get_logger(__name__)
 
 
+def message_from_completion(data: Any) -> dict[str, Any]:
+    """Read the first chat message from an OpenAI-style completion payload."""
+    if not isinstance(data, dict):
+        raise ValueError("llm_invalid_payload")
+    error = data.get("error")
+    if error:
+        if isinstance(error, dict):
+            raise ValueError(str(error.get("message") or error))
+        raise ValueError(str(error))
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("llm_missing_choices")
+    first = choices[0]
+    message = first.get("message") if isinstance(first, dict) else None
+    if not isinstance(message, dict):
+        raise ValueError("llm_missing_message")
+    return message
+
+
 @dataclass
 class LLMResponse:
     content: str
@@ -90,6 +109,9 @@ class MockLLMProvider(LLMProvider):
         max_tokens: int = 1200,
         thinking: bool = False,
     ) -> LLMResponse:
+        from rolloutguard_api.ai.cancel import raise_if_cancelled
+
+        raise_if_cancelled()
         user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
         text = user if isinstance(user, str) else json.dumps(user)
 
@@ -129,8 +151,6 @@ class MockLLMProvider(LLMProvider):
                     "watch",
                     "überwach",
                     "aufgabe",
-                    "karte",
-                    "notion",
                     "override",
                     "überschreib",
                 )
@@ -140,6 +160,9 @@ class MockLLMProvider(LLMProvider):
                 for k in ("vertrag", "pdf", "dokument", "hochgeladen", "sow")
             )
             wants_diff = "neu seit" in lowered or "letzter lauf" in lowered
+            wants_explain = any(
+                token in lowered for token in ("erkläre", "erklaere", "erklär", "diesen befund")
+            )
 
             if last == "get_portfolio_kpis":
                 tool_result = _last_tool_result(messages)
@@ -294,6 +317,40 @@ class MockLLMProvider(LLMProvider):
                     model=self.name,
                     latency_ms=1,
                 )
+            if last in {"NOTION_UPDATE_PAGE", "NOTION_CREATE_PAGE"}:
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "Der Befund steht auf der Demo-Notion-Seite. "
+                                "Bitte die Seite kurz prüfen."
+                            ),
+                            "site_ids": [],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": [last],
+                            "abstained": False,
+                            "confidence": 0.85,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if (
+                wants_explain
+                and last != "list_findings"
+                and "list_findings" in tool_names
+                and "notion" not in lowered
+            ):
+                args: dict[str, Any] = {"limit": 5}
+                site_match = re.search(r"DE-[A-Z]+-\d+", text)
+                if site_match:
+                    args["site_id"] = site_match.group(0)
+                rule_match = re.search(r'"rule_id":\s*"([A-Z]+-\d+)"', text)
+                if rule_match:
+                    args["rule_id"] = rule_match.group(1)
+                return _call("list_findings", args, "call_mock_explain")
             if wants_corpus and last != "search_corpus" and "search_corpus" in tool_names:
                 return _call(
                     "search_corpus",
@@ -307,6 +364,19 @@ class MockLLMProvider(LLMProvider):
             )
             if wants_calendar and "GOOGLECALENDAR_LIST_EVENTS" in tool_names:
                 return _call("GOOGLECALENDAR_LIST_EVENTS", {}, "call_mock_calendar_list")
+            wants_notion = any(k in lowered for k in ("notion", "tabelle"))
+            if wants_notion and "NOTION_UPDATE_PAGE" in tool_names:
+                site_match = re.search(r"DE-[A-Z]+-\d+", text)
+                site_id = site_match.group(0) if site_match else "DE-NRW-0107"
+                return _call(
+                    "NOTION_UPDATE_PAGE",
+                    {
+                        "title": f"Ausnahme {site_id}",
+                        "content": f"Befund {site_id} in die Demo-Notion-Seite übertragen.",
+                        "site_id": site_id,
+                    },
+                    "call_mock_notion",
+                )
             if wants_draft and "GMAIL_CREATE_EMAIL_DRAFT" in tool_names:
                 return _call(
                     "GMAIL_CREATE_EMAIL_DRAFT",
@@ -339,6 +409,32 @@ class MockLLMProvider(LLMProvider):
                     "call_mock_findings",
                 )
             return _call("get_portfolio_kpis", {}, "call_mock_kpis")
+
+        if "Question (untrusted user text)" in text:
+            site_match = re.search(r"DE-[A-Z]+-\d+", text)
+            rule_match = re.search(r'"rule_id":\s*"([A-Z]+-\d+)"', text)
+            site_id = site_match.group(0) if site_match else "DE-NRW-0107"
+            rule_id = rule_match.group(1) if rule_match else "SLA-001"
+            return LLMResponse(
+                content=json.dumps(
+                    {
+                        "answer": (
+                            f"{site_id} · {rule_id}: Forecast liegt nach der "
+                            "vertraglichen Fälligkeit. Die Schwere kommt aus der Regel, "
+                            "nicht aus der KI."
+                        ),
+                        "site_ids": [site_id],
+                        "evidence_ids": [],
+                        "memory_ids": [],
+                        "proposed_action_ids": [],
+                        "tool_trace": ["selected_finding"],
+                        "abstained": False,
+                        "confidence": 0.78,
+                    }
+                ),
+                model=self.name,
+                latency_ms=1,
+            )
 
         if (
             "explain this deterministic finding" in text.lower()
@@ -419,7 +515,7 @@ class DeepSeekProvider(LLMProvider):
         base_url: str,
         model: str,
         reasoning_effort: str = "low",
-        timeout_s: float = 90.0,
+        timeout_s: float = 20.0,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -446,6 +542,8 @@ class DeepSeekProvider(LLMProvider):
         import time
 
         reasoning_effort = self._reasoning_effort(thinking=thinking)
+        if tools:
+            reasoning_effort = None
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -461,8 +559,14 @@ class DeepSeekProvider(LLMProvider):
         else:
             payload["response_format"] = {"type": "json_object"}
 
+        from rolloutguard_api.ai.cancel import raise_if_cancelled, watch_client_close
+
+        raise_if_cancelled()
         started = time.perf_counter()
-        with httpx.Client(timeout=self.timeout_s) as client:
+        timeout = httpx.Timeout(self.timeout_s, connect=min(5.0, self.timeout_s))
+        client = httpx.Client(timeout=timeout)
+        abort_watch = watch_client_close(client)
+        try:
             try:
                 response = client.post(
                     f"{self.base_url}/chat/completions",
@@ -474,6 +578,7 @@ class DeepSeekProvider(LLMProvider):
                 )
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
+                raise_if_cancelled()
                 if (
                     not tools
                     and "response_format" in payload
@@ -492,10 +597,44 @@ class DeepSeekProvider(LLMProvider):
                     response.raise_for_status()
                 else:
                     raise
+            except (httpx.HTTPError, RuntimeError):
+                raise_if_cancelled()
+                raise
             data = response.json()
+        finally:
+            abort_watch.set()
+            client.close()
+        raise_if_cancelled()
         latency_ms = int((time.perf_counter() - started) * 1000)
 
-        choice = data["choices"][0]["message"]
+        try:
+            choice = message_from_completion(data)
+        except ValueError as exc:
+            log.warning(
+                "deepseek_unexpected_payload",
+                error=str(exc),
+                keys=list(data) if isinstance(data, dict) else type(data).__name__,
+            )
+            return LLMResponse(
+                content=json.dumps(
+                    {
+                        "answer": (
+                            "Die KI-Antwort ist gerade nicht verfügbar. "
+                            "Bitte die Frage erneut senden."
+                        ),
+                        "site_ids": [],
+                        "evidence_ids": [],
+                        "memory_ids": [],
+                        "proposed_action_ids": [],
+                        "tool_trace": [],
+                        "abstained": True,
+                        "confidence": 0.0,
+                    }
+                ),
+                model=data.get("model", self.model) if isinstance(data, dict) else self.model,
+                latency_ms=latency_ms,
+                raw=data if isinstance(data, dict) else None,
+            )
         tool_calls = choice.get("tool_calls")
         content = choice.get("content") or ""
         reasoning = choice.get("reasoning_content") or choice.get("reasoning")

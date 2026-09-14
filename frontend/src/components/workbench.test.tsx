@@ -133,11 +133,97 @@ describe('agent sidebar', () => {
         onDraftChange={vi.fn()}
         onSubmit={vi.fn()}
         onRetry={vi.fn()}
+        onStop={vi.fn()}
         onConfirmAction={vi.fn()}
         onEvidenceSelect={vi.fn()}
       />,
     )
     expect(screen.getByText('Antwort wird erstellt')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Antwort anhalten' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Anhalten' })).toBeInTheDocument()
+  })
+
+  it('lets a cancelled turn be retried without treating it as a load error', () => {
+    render(
+      <AgentSidebar
+        collapsed={false}
+        analysisId={4}
+        draft=""
+        turns={[{ ...completeTurn, id: 'stopped', status: 'cancelled', result: undefined }]}
+        actions={[]}
+        onToggle={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRetry={vi.fn()}
+        onStop={vi.fn()}
+        onConfirmAction={vi.fn()}
+        onEvidenceSelect={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Antwort angehalten.')).toBeInTheDocument()
+    expect(screen.queryByText('Antwort konnte nicht geladen werden.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Wiederholen/ })).toBeInTheDocument()
+  })
+
+  it('shows starter prompts in the empty transcript and submits on click', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    render(
+      <AgentSidebar
+        collapsed={false}
+        analysisId={4}
+        draft=""
+        turns={[]}
+        actions={[]}
+        onToggle={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSubmit={onSubmit}
+        onRetry={vi.fn()}
+        onConfirmAction={vi.fn()}
+        viewport={{
+          label: 'SLA-001 · DE-NRW-0107',
+          page: 'befund',
+          findingId: 17,
+          selectedFinding: {
+            id: 17,
+            site_id: 'DE-NRW-0107',
+            rule_id: 'SLA-001',
+            severity: 'critical',
+            status: 'open',
+            message: 'Forecast liegt nach der vertraglichen Fälligkeit.',
+            facts: {},
+            evidence_count: 2,
+          },
+          pendingDraftCount: 0,
+        }}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Erkläre diesen Befund' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Welche Quelle belegt das?' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Nächste Schritte vorschlagen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Schreibe diesen Befund in Notion' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Erkläre diesen Befund' }))
+    expect(onSubmit).toHaveBeenCalledWith('Erkläre diesen Befund')
+  })
+
+  it('hides starter prompts once a turn exists, including pending', () => {
+    render(
+      <AgentSidebar
+        collapsed={false}
+        analysisId={4}
+        draft=""
+        turns={[{ ...completeTurn, id: 'pending', status: 'pending', result: undefined }]}
+        actions={[]}
+        onToggle={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRetry={vi.fn()}
+        onStop={vi.fn()}
+        onConfirmAction={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Erkläre diesen Befund' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Warum ist DE-NRW-0107/ })).not.toBeInTheDocument()
   })
 
   it('hides the empty-state and composer while session history is open', () => {
@@ -324,6 +410,39 @@ describe('agent sidebar', () => {
     act(() => result.current.startNewSession())
     await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
     expect(result.current.sessionId).toBe(existing)
+    vi.unstubAllGlobals()
+  })
+
+  it('cancels an in-flight question when stop is requested', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (String(url).includes('/assistant/queries/cancel')) {
+          return Promise.resolve({ ok: true, json: async () => ({ cancelled: 1 }) })
+        }
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          })
+        })
+      }),
+    )
+    const { result } = renderHook(() => useAgentAsk(4))
+    act(() => result.current.submitQuestion('Kannst du Notion erreichen?'))
+    expect(result.current.history[0].status).toBe('pending')
+    expect(result.current.askPending).toBe(true)
+
+    act(() => result.current.stopQuestion())
+    await waitFor(() => expect(result.current.history[0].status).toBe('cancelled'))
+    expect(result.current.askPending).toBe(false)
+    expect(result.current.askError).toBe(false)
+    const cancelCall = vi.mocked(fetch).mock.calls.find(([url]) =>
+      String(url).includes('/assistant/queries/cancel'),
+    )
+    expect(cancelCall).toBeTruthy()
+    expect(JSON.parse(String((cancelCall?.[1] as RequestInit).body))).toMatchObject({
+      analysis_run_id: 4,
+    })
     vi.unstubAllGlobals()
   })
 })

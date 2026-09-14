@@ -9,6 +9,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_DB = REPO_ROOT / "backend" / "test_rolloutguard.db"
+os.environ.setdefault("SKIP_LIVE_LLM", "1")
 
 
 @pytest.fixture(scope="session", autouse=True)

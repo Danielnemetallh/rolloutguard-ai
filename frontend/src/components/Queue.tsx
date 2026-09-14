@@ -217,6 +217,8 @@ export function Queue({
                   <tr
                     key={f.id}
                     tabIndex={0}
+                    role="button"
+                    aria-label={`${severityLabel(f.severity)} ${f.site_id} ${f.rule_id}`}
                     aria-selected={selectedId === f.id}
                     className={cn(
                       'cursor-pointer transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/35',

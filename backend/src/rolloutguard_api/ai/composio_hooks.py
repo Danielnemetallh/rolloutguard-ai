@@ -29,8 +29,8 @@ TOOL_POLICY: dict[str, Policy] = {
     "GOOGLECALENDAR_UPDATE_EVENT": "ask",
     "GOOGLECALENDAR_DELETE_EVENT": "ask",
     "GMAIL_CREATE_EMAIL_DRAFT": "ask",
-    "NOTION_CREATE_PAGE": "ask",
-    "NOTION_UPDATE_PAGE": "ask",
+    "NOTION_CREATE_PAGE": "auto",
+    "NOTION_UPDATE_PAGE": "auto",
 }
 
 TOOL_ACTION_TYPE: dict[str, str] = {
@@ -100,13 +100,23 @@ COMPOSIO_TOOL_SPECS: list[dict[str, Any]] = [
     ),
     tool_fn(
         "NOTION_CREATE_PAGE",
-        "Notion-Seite anlegen. Der Hook fragt zuerst um Freigabe.",
+        "Notiz auf der zugeordneten Demo-Notion-Seite anlegen. Läuft sofort, ohne Freigabe.",
         {
             "title": {"type": "string"},
             "content": {"type": "string"},
             "site_id": {"type": "string"},
         },
         ["title"],
+    ),
+    tool_fn(
+        "NOTION_UPDATE_PAGE",
+        "Inhalt auf der zugeordneten Demo-Notion-Seite ergänzen. Läuft sofort, ohne Freigabe.",
+        {
+            "title": {"type": "string"},
+            "content": {"type": "string"},
+            "site_id": {"type": "string"},
+        },
+        ["content"],
     ),
 ]
 

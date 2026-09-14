@@ -24,7 +24,9 @@ export function Leitstand() {
           <Button
             type="button"
             size="sm"
-            disabled={!workbench.projectId || workbench.analyzePending}
+            disabled={
+              !workbench.projectId || workbench.analyzePending || workbench.importPending
+            }
             onClick={workbench.onAnalyze}
           >
             <Play className="size-4" />

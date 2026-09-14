@@ -22,6 +22,25 @@ def test_extract_json_from_fenced_noise() -> None:
     assert extract_json_object(text) == {"a": 1, "b": "x"}
 
 
+def test_message_from_completion_reads_choice() -> None:
+    from rolloutguard_api.ai.provider import message_from_completion
+
+    message = message_from_completion(
+        {"choices": [{"message": {"content": "ok", "tool_calls": None}}]}
+    )
+    assert message["content"] == "ok"
+
+
+def test_message_from_completion_rejects_error_payload() -> None:
+    from rolloutguard_api.ai.provider import message_from_completion
+
+    try:
+        message_from_completion({"error": {"message": "invalid tools"}})
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "invalid tools" in str(exc)
+
+
 def test_explain_finding_mock_grounds_evidence() -> None:
     evidence = [
         {
@@ -228,6 +247,58 @@ def test_agent_gmail_draft_asks_permission_via_hook() -> None:
     )
     assert "GMAIL_CREATE_EMAIL_DRAFT" in answer.tool_trace
     assert answer.proposed_action_ids
+
+
+def test_agent_notion_writes_without_permission() -> None:
+    answer = _run_agent_on_synthetic(
+        "Kannst du diesen Befund in die Notion Tabelle eintragen?"
+    )
+    assert "NOTION_UPDATE_PAGE" in answer.tool_trace
+    assert not answer.proposed_action_ids
+
+
+def test_agent_explain_finding_skips_notion() -> None:
+    answer = _run_agent_on_synthetic("Erkläre mir diesen Befund")
+    assert "NOTION_UPDATE_PAGE" not in answer.tool_trace
+    assert "list_findings" in answer.tool_trace
+
+
+def test_agent_explain_uses_selected_finding_without_tools() -> None:
+    client = TestClient(create_app())
+    project_id = client.get("/api/projects").json()[0]["id"]
+    analysis_id = client.post(f"/api/projects/{project_id}/analyze-synthetic").json()[
+        "analysis_run_id"
+    ]
+    from rolloutguard_api.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        answer = run_agent(
+            db,
+            analysis_run_id=analysis_id,
+            session_id=new_session_id(),
+            question="Erkläre diesen Befund",
+            viewport={
+                "page": "befund",
+                "selected_finding": {
+                    "id": 2,
+                    "site_id": "DE-NRW-0107",
+                    "rule_id": "SLA-001",
+                    "message": "Forecast liegt nach der vertraglichen Fälligkeit.",
+                    "facts": {
+                        "forecast_date": "2026-09-20",
+                        "contractual_due_date": "2026-09-15",
+                    },
+                },
+            },
+            provider=MockLLMProvider(),
+        )
+    finally:
+        db.close()
+    assert "NOTION_UPDATE_PAGE" not in answer.tool_trace
+    assert "list_findings" not in answer.tool_trace
+    assert "DE-NRW-0107" in answer.answer
+    assert "SLA-001" in answer.answer
 
 
 def test_get_llm_provider_uses_mock_when_disabled(monkeypatch) -> None:
