@@ -12,7 +12,9 @@ from rolloutguard_api.services.reconcile import reconcile
 from rolloutguard_api.services.rules import evaluate_sites
 
 SYNTH = Path(__file__).resolve().parents[2] / "data" / "synthetic"
-AS_OF = date(2026, 7, 26)
+# FRS-001 last_updated is generated relative to "now", so a frozen 2026-07-26
+# misses the stale site after the files are regenerated.
+AS_OF = date.today()
 
 
 def _run_pipeline():

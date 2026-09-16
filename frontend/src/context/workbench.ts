@@ -1,13 +1,32 @@
 import { createContext, useContext } from 'react'
+import type { AgentViewportContext } from '@/hooks/useAgentViewportContext'
 import type {
   AgentResult,
+  AgentSessionSummary,
+  AgentTurn,
   Diff,
   ExplainResult,
   Finding,
   HeroFinding,
+  IntegrationStatus,
   Meta,
+  ProposedAction,
   SortKey,
-} from '../types'
+  UploadedDocument,
+} from '@/types'
+
+export type MappingRow = {
+  id: number
+  source_header: string
+  canonical_field: string | null
+  filename: string
+}
+
+export type DraftActionArgs = {
+  action_type: string
+  payload: Record<string, unknown>
+  site_id?: string
+}
 
 export type WorkbenchContextValue = {
   meta: Meta | undefined
@@ -16,6 +35,7 @@ export type WorkbenchContextValue = {
   analysisId: number | null
   projectId: number | undefined
   analyzePending: boolean
+  importPending: boolean
   exportPending: boolean
   kpis: Record<string, number> | undefined
   diff: Diff | undefined
@@ -28,9 +48,11 @@ export type WorkbenchContextValue = {
         created_at: string | null
       }>
     | undefined
+  analysesLoading: boolean
+  analysesError: boolean
   findings: Finding[]
   findingsLoading: boolean
-  findingsError: Error | null
+  findingsError: boolean
   totalCount: number | undefined
   visibleFindings: Finding[]
   search: string
@@ -40,35 +62,62 @@ export type WorkbenchContextValue = {
   heroFindings: HeroFinding[] | undefined
   showHeroHints: boolean
   question: string
-  lastQuestion: string
   askPending: boolean
-  askError: Error | null
+  askError: boolean
   askResult: AgentResult | undefined
+  history: AgentTurn[]
+  retryQuestion: (turnId: string, viewport?: AgentViewportContext) => void
+  stopQuestion: () => void
+  startNewAgentSession: () => void
+  loadAgentHistory: () => void
+  resumeAgentSession: (sessionId: string) => void
+  deleteAgentSession: (sessionId: string) => void
+  renameAgentSession: (sessionId: string, title: string) => void
+  closeAgentHistory: () => void
+  agentHistoryOpen: boolean
+  savedAgentSessions: AgentSessionSummary[]
   explainPending: boolean
-  explainError: Error | null
   reviewPending: boolean
-  reviewError: Error | null
+  reviewError: boolean
   reviewSuccess: boolean
   explainResult: ExplainResult | undefined
   highlightedEvidenceId: string | null
+  integrations: IntegrationStatus | undefined
+  documents: UploadedDocument[]
+  documentsLoading: boolean
+  documentsError: boolean
+  pendingMappings: MappingRow[]
+  uploadPending: boolean
+  actions: ProposedAction[]
+  actionsLoading: boolean
+  actionsError: boolean
+  pendingActionCount: number
+  actionMutationPending: boolean
   onAnalyze: () => void
+  onImportWorkbooks: (files: File[], onSuccess?: () => void) => void
   onExport: () => void
-  retryBootstrap: () => void
-  retryFindings: () => void
   onSelectRun: (id: number) => void
   onSearchChange: (value: string) => void
   onSeverityChange: (value: string) => void
   onToggleSort: (key: SortKey) => void
   matchHeroFinding: (hero: HeroFinding) => Finding | undefined
   questionChange: (value: string) => void
-  submitQuestion: () => void
-  retryQuestion: () => void
+  submitQuestion: (override?: string, viewport?: AgentViewportContext) => void
   highlightEvidence: (id: string) => void
   explainFinding: (id: number) => void
-  retryExplain: () => void
   approveFinding: (id: number) => void
   dismissFinding: (id: number) => void
   resetExplain: () => void
+  onUploadDocument: (file: File) => void
+  onConnect: () => void
+  onDraftAction: (args: DraftActionArgs) => void
+  onApproveMapping: (id: number) => void
+  retryFindings: () => void
+  retryDocuments: () => void
+  retryActions: () => void
+  confirmAction: (id: number) => void
+  dismissAction: (id: number) => void
+  retryAnalyses: () => void
 }
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | null>(null)

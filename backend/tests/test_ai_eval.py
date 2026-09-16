@@ -6,13 +6,39 @@ from fastapi.testclient import TestClient
 
 from rolloutguard_api.ai.agent import run_agent
 from rolloutguard_api.ai.enrichment import classify_blocker, explain_finding
-from rolloutguard_api.ai.provider import MockLLMProvider, extract_json_object
+from rolloutguard_api.ai.memory import new_session_id
+from rolloutguard_api.ai.provider import (
+    MockLLMProvider,
+    extract_json_object,
+    get_llm_provider,
+    llm_mock_reason,
+)
+from rolloutguard_api.core.config import get_settings
 from rolloutguard_api.main import create_app
 
 
 def test_extract_json_from_fenced_noise() -> None:
     text = 'Sure!\n```json\n{"a": 1, "b": "x"}\n```\n'
     assert extract_json_object(text) == {"a": 1, "b": "x"}
+
+
+def test_message_from_completion_reads_choice() -> None:
+    from rolloutguard_api.ai.provider import message_from_completion
+
+    message = message_from_completion(
+        {"choices": [{"message": {"content": "ok", "tool_calls": None}}]}
+    )
+    assert message["content"] == "ok"
+
+
+def test_message_from_completion_rejects_error_payload() -> None:
+    from rolloutguard_api.ai.provider import message_from_completion
+
+    try:
+        message_from_completion({"error": {"message": "invalid tools"}})
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "invalid tools" in str(exc)
 
 
 def test_explain_finding_mock_grounds_evidence() -> None:
@@ -111,6 +137,7 @@ def _run_agent_on_synthetic(question: str):
         return run_agent(
             db,
             analysis_run_id=analysis_id,
+            session_id=new_session_id(),
             question=question,
             provider=MockLLMProvider(),
         )
@@ -140,3 +167,160 @@ def test_agent_chip_loads_site_timeline() -> None:
 def test_agent_generic_question_uses_kpis() -> None:
     answer = _run_agent_on_synthetic("Wie viele Standorte sind im Portfolio?")
     assert "get_portfolio_kpis" in answer.tool_trace
+
+
+def test_agent_searches_corpus_for_contract_question() -> None:
+    answer = _run_agent_on_synthetic(
+        "Was steht im hochgeladenen Vertrag zu DE-NRW-0107?"
+    )
+    assert "search_corpus" in answer.tool_trace
+    assert answer.memory_ids or "DE-NRW-0107" in answer.answer
+
+
+def test_agent_forces_trusted_analysis_run_id() -> None:
+    from rolloutguard_api.ai.provider import LLMProvider, LLMResponse
+    from rolloutguard_api.ai.tools import TOOL_IMPL
+
+    captured: dict[str, object] = {}
+    original = TOOL_IMPL["get_portfolio_kpis"]
+
+    def capture(db, **kwargs):
+        captured.update(kwargs)
+        return original(db, **kwargs)
+
+    TOOL_IMPL["get_portfolio_kpis"] = capture
+
+    class WrongRunProvider(LLMProvider):
+        name = "wrong-run-mock"
+
+        def complete(
+            self,
+            messages,
+            *,
+            tools=None,
+            temperature=0.0,
+            max_tokens=1200,
+            thinking=False,
+        ):
+            return LLMResponse(
+                content="",
+                model=self.name,
+                latency_ms=1,
+                tool_calls=[
+                    {
+                        "id": "call_wrong",
+                        "type": "function",
+                        "function": {
+                            "name": "get_portfolio_kpis",
+                            "arguments": '{"analysis_run_id": 99999}',
+                        },
+                    }
+                ],
+            )
+
+    client = TestClient(create_app())
+    projects = client.get("/api/projects").json()
+    project_id = projects[0]["id"]
+    analysis = client.post(f"/api/projects/{project_id}/analyze-synthetic").json()
+    trusted_run = analysis["analysis_run_id"]
+
+    from rolloutguard_api.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        run_agent(
+            db,
+            analysis_run_id=trusted_run,
+            session_id=new_session_id(),
+            question="Portfolio KPIs?",
+            provider=WrongRunProvider(),
+        )
+        assert captured.get("analysis_run_id") == trusted_run
+    finally:
+        db.close()
+        TOOL_IMPL["get_portfolio_kpis"] = original
+
+
+def test_agent_gmail_draft_asks_permission_via_hook() -> None:
+    answer = _run_agent_on_synthetic(
+        "Erstelle einen Briefing-Mailentwurf für NordTurm zu DE-NRW-0107."
+    )
+    assert "GMAIL_CREATE_EMAIL_DRAFT" in answer.tool_trace
+    assert answer.proposed_action_ids
+
+
+def test_agent_notion_writes_without_permission() -> None:
+    answer = _run_agent_on_synthetic(
+        "Kannst du diesen Befund in die Notion Tabelle eintragen?"
+    )
+    assert "NOTION_UPDATE_PAGE" in answer.tool_trace
+    assert not answer.proposed_action_ids
+
+
+def test_agent_explain_finding_skips_notion() -> None:
+    answer = _run_agent_on_synthetic("Erkläre mir diesen Befund")
+    assert "NOTION_UPDATE_PAGE" not in answer.tool_trace
+    assert "list_findings" in answer.tool_trace
+
+
+def test_agent_explain_uses_selected_finding_without_tools() -> None:
+    client = TestClient(create_app())
+    project_id = client.get("/api/projects").json()[0]["id"]
+    analysis_id = client.post(f"/api/projects/{project_id}/analyze-synthetic").json()[
+        "analysis_run_id"
+    ]
+    from rolloutguard_api.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        answer = run_agent(
+            db,
+            analysis_run_id=analysis_id,
+            session_id=new_session_id(),
+            question="Erkläre diesen Befund",
+            viewport={
+                "page": "befund",
+                "selected_finding": {
+                    "id": 2,
+                    "site_id": "DE-NRW-0107",
+                    "rule_id": "SLA-001",
+                    "message": "Forecast liegt nach der vertraglichen Fälligkeit.",
+                    "facts": {
+                        "forecast_date": "2026-09-20",
+                        "contractual_due_date": "2026-09-15",
+                    },
+                },
+            },
+            provider=MockLLMProvider(),
+        )
+    finally:
+        db.close()
+    assert "NOTION_UPDATE_PAGE" not in answer.tool_trace
+    assert "list_findings" not in answer.tool_trace
+    assert "DE-NRW-0107" in answer.answer
+    assert "SLA-001" in answer.answer
+
+
+def test_get_llm_provider_uses_mock_when_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    get_settings.cache_clear()
+    assert llm_mock_reason() == "llm_disabled"
+    assert get_llm_provider().name == "deterministic-mock"
+
+
+def test_get_llm_provider_uses_mock_without_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "")
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    get_settings.cache_clear()
+    assert llm_mock_reason() == "no_api_key"
+    assert get_llm_provider().name == "deterministic-mock"
+
+
+def test_get_llm_provider_uses_deepseek_when_configured(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    get_settings.cache_clear()
+    assert llm_mock_reason() is None
+    assert get_llm_provider().name == "deepseek"
+

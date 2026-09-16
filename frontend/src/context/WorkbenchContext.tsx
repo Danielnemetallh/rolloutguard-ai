@@ -3,7 +3,9 @@ import { useAgentAsk } from '@/hooks/useAgentAsk'
 import { useAnalysisSession } from '@/hooks/useAnalysisSession'
 import { useFindingActions } from '@/hooks/useFindingActions'
 import { useFindingsQueue } from '@/hooks/useFindingsQueue'
-import { WorkbenchContext, type WorkbenchContextValue } from './workbench'
+import { useProposedActions } from '@/hooks/useProposedActions'
+import { useWorkbenchExtras } from '@/hooks/useWorkbenchExtras'
+import { WorkbenchContext, type WorkbenchContextValue } from '@/context/workbench'
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [statusOverrides, setStatusOverrides] = useState<Record<number, string>>({})
@@ -13,6 +15,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const queue = useFindingsQueue(session.analysisId, session.heroFindings, statusOverrides)
   const actions = useFindingActions(setStatusOverrides)
   const agent = useAgentAsk(session.analysisId)
+  const extras = useWorkbenchExtras(session.projectId, session.analysisId)
+  const proposedActions = useProposedActions(session.projectId)
 
   const value = useMemo<WorkbenchContextValue>(
     () => ({
@@ -22,10 +26,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       analysisId: session.analysisId,
       projectId: session.projectId,
       analyzePending: session.analyzePending,
+      importPending: session.importPending,
       exportPending: session.exportPending,
       kpis: session.kpis,
       diff: session.diff,
       analyses: session.analyses,
+      analysesLoading: session.analysesLoading,
+      analysesError: session.analysesError,
       findings: queue.findings,
       findingsLoading: queue.findingsLoading,
       findingsError: queue.findingsError,
@@ -38,33 +45,55 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       heroFindings: session.heroFindings,
       showHeroHints: queue.showHeroHints,
       question: agent.question,
-      lastQuestion: agent.lastQuestion,
       askPending: agent.askPending,
       askError: agent.askError,
       askResult: agent.askResult,
+      history: agent.history,
+      retryQuestion: agent.retryQuestion,
+      stopQuestion: agent.stopQuestion,
+      startNewAgentSession: agent.startNewSession,
+      loadAgentHistory: () => {
+        void agent.loadSessionHistory()
+      },
+      resumeAgentSession: (sessionId) => {
+        void agent.resumeSession(sessionId)
+      },
+      deleteAgentSession: (sessionId) => {
+        void agent.deleteSession(sessionId)
+      },
+      renameAgentSession: (sessionId, title) => {
+        void agent.renameSession(sessionId, title)
+      },
+      closeAgentHistory: agent.closeHistory,
+      agentHistoryOpen: agent.historyOpen,
+      savedAgentSessions: agent.savedSessions,
       explainPending: actions.explainPending,
-      explainError: actions.explainError,
       reviewPending: actions.reviewPending,
-      reviewError: actions.reviewError,
+      reviewError: Boolean(actions.reviewError),
       reviewSuccess: actions.reviewSuccess,
       explainResult: actions.explainResult,
       highlightedEvidenceId,
-      onAnalyze: () => {
-        actions.resetReview()
-        session.onAnalyze(() => {
+      integrations: extras.integrations,
+      documents: extras.documents,
+      documentsLoading: extras.documentsLoading,
+      documentsError: extras.documentsError,
+      pendingMappings: extras.pendingMappings,
+      uploadPending: extras.uploadPending,
+      actions: proposedActions.actions,
+      actionsLoading: proposedActions.actionsLoading,
+      actionsError: proposedActions.actionsError,
+      pendingActionCount: proposedActions.pendingActionCount,
+      actionMutationPending: proposedActions.actionMutationPending,
+      onAnalyze: () => session.onAnalyze(() => setStatusOverrides({})),
+      onImportWorkbooks: (files, onSuccess) =>
+        session.onImportWorkbooks(files, () => {
           setStatusOverrides({})
-          setHighlightedEvidenceId(null)
-        })
-      },
+          onSuccess?.()
+        }),
       onExport: session.onExport,
-      retryBootstrap: session.retryBootstrap,
-      retryFindings: queue.retryFindings,
       onSelectRun: (id) => {
         session.setAnalysisId(id)
-        setStatusOverrides({})
-        setHighlightedEvidenceId(null)
         actions.resetExplain()
-        actions.resetReview()
       },
       onSearchChange: queue.onSearchChange,
       onSeverityChange: queue.onSeverityChange,
@@ -72,7 +101,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       matchHeroFinding: queue.matchHeroFinding,
       questionChange: agent.questionChange,
       submitQuestion: agent.submitQuestion,
-      retryQuestion: agent.retryQuestion,
       highlightEvidence: (id) => {
         setHighlightedEvidenceId(id)
         document.getElementById(`evidence-${id}`)?.scrollIntoView({
@@ -81,12 +109,21 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         })
       },
       explainFinding: actions.explainFinding,
-      retryExplain: actions.retryExplain,
       approveFinding: actions.approveFinding,
       dismissFinding: actions.dismissFinding,
       resetExplain: actions.resetExplain,
+      onUploadDocument: extras.onUploadDocument,
+      onConnect: extras.onConnect,
+      onDraftAction: extras.onDraftAction,
+      onApproveMapping: extras.onApproveMapping,
+      retryFindings: queue.retryFindings,
+      retryDocuments: extras.retryDocuments,
+      retryActions: proposedActions.retryActions,
+      confirmAction: proposedActions.confirmAction,
+      dismissAction: proposedActions.dismissAction,
+      retryAnalyses: session.retryAnalyses,
     }),
-    [session, queue, actions, agent, highlightedEvidenceId],
+    [session, queue, actions, agent, extras, proposedActions, highlightedEvidenceId],
   )
 
   return <WorkbenchContext.Provider value={value}>{children}</WorkbenchContext.Provider>

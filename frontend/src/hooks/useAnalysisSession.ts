@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ANALYSIS_KEY, apiFetch, describeApiError, readStoredAnalysisId } from '@/lib/api'
+import { ANALYSIS_KEY, API_BASE, apiErrorMessage, readStoredAnalysisId, workbookUploadName } from '@/lib/api'
 import type { Diff, HeroFinding, Meta } from '../types'
 
 type AnalysisSummary = {
@@ -22,47 +22,95 @@ export function useAnalysisSession() {
     else sessionStorage.removeItem(ANALYSIS_KEY)
   }, [analysisId])
 
-  const {
-    data: meta,
-    isLoading: metaLoading,
-    error: metaError,
-    refetch: refetchMeta,
-  } = useQuery({
+  const { data: meta, isLoading, error } = useQuery({
     queryKey: ['meta'],
-    queryFn: () => apiFetch<Meta>('/api/meta'),
+    queryFn: async (): Promise<Meta> => {
+      const res = await fetch(`${API_BASE}/api/meta`)
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      return res.json()
+    },
     retry: 1,
   })
 
   const projects = useQuery({
     queryKey: ['projects'],
-    queryFn: () => apiFetch<Array<{ id: number; name: string }>>('/api/projects'),
-    enabled: !metaError,
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/projects`)
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      return res.json() as Promise<Array<{ id: number; name: string }>>
+    },
+    enabled: !error,
   })
 
   const analyze = useMutation({
-    mutationFn: (projectId: number) =>
-      apiFetch<{
+    mutationFn: async (projectId: number) => {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyze-synthetic`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json() as Promise<{
         analysis_run_id: number
         kpis: Record<string, number>
         hero_findings: HeroFinding[]
-      }>(`/api/projects/${projectId}/analyze-synthetic`, {
-        method: 'POST',
-      }),
+      }>
+    },
     onSuccess: (data) => {
       setAnalysisId(data.analysis_run_id)
       setHeroFindings(data.hero_findings)
-      toast.success(`Analyse abgeschlossen — Lauf #${data.analysis_run_id}`)
+      toast.success(`Analyse abgeschlossen: Lauf #${data.analysis_run_id}`)
       void qc.invalidateQueries({ queryKey: ['findings'] })
       void qc.invalidateQueries({ queryKey: ['analyses'] })
+      void qc.invalidateQueries({ queryKey: ['mappings'] })
     },
-    onError: (error) => toast.error(describeApiError(error)),
+    onError: () => toast.error('Analyse fehlgeschlagen. Läuft die API?'),
+  })
+
+  const importWorkbooks = useMutation({
+    mutationFn: async (args: { projectId: number; files: File[] }) => {
+      const body = new FormData()
+      for (const file of args.files) {
+        body.append('files', file, workbookUploadName(file))
+      }
+      const res = await fetch(`${API_BASE}/api/projects/${args.projectId}/imports`, {
+        method: 'POST',
+        body,
+      })
+      if (!res.ok) throw new Error(apiErrorMessage(await res.text(), 'Workbook-Import fehlgeschlagen'))
+      return res.json() as Promise<{
+        analysis_run_id: number
+        kpis: Record<string, number>
+        site_count: number
+        imported_files?: string[]
+      }>
+    },
+    onSuccess: (data) => {
+      setAnalysisId(data.analysis_run_id)
+      setHeroFindings(undefined)
+      const names = data.imported_files?.join(', ')
+      toast.success(
+        names
+          ? `Datei aufgenommen: ${names} — Lauf #${data.analysis_run_id}`
+          : `Import abgeschlossen: Lauf #${data.analysis_run_id}`,
+      )
+      void qc.invalidateQueries({ queryKey: ['findings'] })
+      void qc.invalidateQueries({ queryKey: ['analyses'] })
+      void qc.invalidateQueries({ queryKey: ['mappings'] })
+      void qc.invalidateQueries({ queryKey: ['documents'] })
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Workbook-Import fehlgeschlagen'
+      toast.error(message.length > 180 ? 'Workbook-Import fehlgeschlagen' : message)
+    },
   })
 
   const exportRun = useMutation({
-    mutationFn: (runId: number) =>
-      apiFetch<{ format?: string }>(`/api/analyses/${runId}/exports`, { method: 'POST' }),
+    mutationFn: async (runId: number) => {
+      const res = await fetch(`${API_BASE}/api/analyses/${runId}/exports`, { method: 'POST' })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json() as Promise<{ format?: string }>
+    },
     onSuccess: () => toast.success('Export nach data/uploads/exports/ geschrieben'),
-    onError: (error) => toast.error(describeApiError(error)),
+    onError: () => toast.error('Export fehlgeschlagen'),
   })
 
   const projectId = projects.data?.[0]?.id
@@ -70,54 +118,64 @@ export function useAnalysisSession() {
   const analyses = useQuery({
     queryKey: ['analyses', projectId],
     enabled: !!projectId,
-    queryFn: () =>
-      apiFetch<{ count: number; analyses: AnalysisSummary[] }>(
-        `/api/projects/${projectId!}/analyses`,
-      ),
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyses`)
+      if (!res.ok) throw new Error(await res.text())
+      return res.json() as Promise<{ count: number; analyses: AnalysisSummary[] }>
+    },
   })
 
   const diff = useQuery({
     queryKey: ['diff', analysisId],
     enabled: analysisId != null,
-    queryFn: () => apiFetch<Diff>(`/api/analyses/${analysisId!}/diff`),
+    queryFn: async (): Promise<Diff> => {
+      const res = await fetch(`${API_BASE}/api/analyses/${analysisId}/diff`)
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
   })
 
-  const selectAnalysis = (id: number | null) => {
-    setAnalysisId(id)
-    setHeroFindings(undefined)
-  }
+  const activeSummary = analyses.data?.analyses.find((a) => a.id === analysisId)
+  const kpis = activeSummary?.kpis ?? analyze.data?.kpis ?? importWorkbooks.data?.kpis
 
   useEffect(() => {
-    if (!analyses.data || analyze.isPending || analyses.isFetching) return
-    if (analysisId != null && analyses.data.analyses.some((run) => run.id === analysisId)) return
-    setAnalysisId(analyses.data.analyses[0]?.id ?? null)
-    setHeroFindings(undefined)
-  }, [analyses.data, analyses.isFetching, analyze.isPending, analysisId])
-
-  const activeSummary = analyses.data?.analyses.find((a) => a.id === analysisId)
-  const kpis = activeSummary?.kpis ?? analyze.data?.kpis
+    const runs = analyses.data?.analyses
+    if (!runs?.length) return
+    const stillThere = analysisId != null && runs.some((run) => run.id === analysisId)
+    if (stillThere) return
+    const synthetic = runs.find((run) => Number(run.kpis?.sites_total) === 50)
+    setAnalysisId((synthetic ?? runs[0]).id)
+  }, [analyses.data, analysisId])
 
   return {
     meta,
-    isLoading: metaLoading || projects.isLoading,
-    error: metaError ?? projects.error ?? null,
+    isLoading,
+    error: error ?? null,
     analysisId,
-    setAnalysisId: selectAnalysis,
+    setAnalysisId,
     projectId,
     analyzePending: analyze.isPending,
+    importPending: importWorkbooks.isPending,
     exportPending: exportRun.isPending,
     kpis,
     diff: diff.data,
     analyses: analyses.data?.analyses,
+    analysesLoading: analyses.isPending,
+    analysesError: analyses.isError,
     heroFindings,
-    retryBootstrap: () => {
-      void refetchMeta()
-      void projects.refetch()
-    },
     onAnalyze: (onSuccess?: () => void) => {
       if (!projectId) return
       analyze.mutate(projectId, { onSuccess: () => onSuccess?.() })
     },
+    onImportWorkbooks: (files: File[], onSuccess?: () => void) => {
+      if (!projectId) {
+        toast.error('Projekt noch nicht geladen — läuft die API?')
+        return
+      }
+      if (files.length === 0) return
+      importWorkbooks.mutate({ projectId, files }, { onSuccess: () => onSuccess?.() })
+    },
     onExport: () => analysisId && exportRun.mutate(analysisId),
+    retryAnalyses: () => void analyses.refetch(),
   }
 }

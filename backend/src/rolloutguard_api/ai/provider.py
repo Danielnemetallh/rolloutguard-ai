@@ -1,4 +1,4 @@
-"""LLM provider abstraction — OpenCode Zen + deterministic mock."""
+"""LLM provider abstraction — DeepSeek + deterministic mock."""
 
 from __future__ import annotations
 
@@ -16,6 +16,25 @@ from rolloutguard_api.core.logging import get_logger
 log = get_logger(__name__)
 
 
+def message_from_completion(data: Any) -> dict[str, Any]:
+    """Read the first chat message from an OpenAI-style completion payload."""
+    if not isinstance(data, dict):
+        raise ValueError("llm_invalid_payload")
+    error = data.get("error")
+    if error:
+        if isinstance(error, dict):
+            raise ValueError(str(error.get("message") or error))
+        raise ValueError(str(error))
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("llm_missing_choices")
+    first = choices[0]
+    message = first.get("message") if isinstance(first, dict) else None
+    if not isinstance(message, dict):
+        raise ValueError("llm_missing_message")
+    return message
+
+
 @dataclass
 class LLMResponse:
     content: str
@@ -23,6 +42,7 @@ class LLMResponse:
     latency_ms: int
     raw: dict[str, Any] | None = None
     tool_calls: list[dict[str, Any]] | None = None
+    reasoning_content: str | None = None
 
 
 class LLMProvider(ABC):
@@ -36,6 +56,7 @@ class LLMProvider(ABC):
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int = 1200,
+        thinking: bool = False,
     ) -> LLMResponse:
         raise NotImplementedError
 
@@ -47,6 +68,31 @@ class LLMProvider(ABC):
     ) -> dict[str, Any]:
         response = self.complete(messages, temperature=temperature)
         return extract_json_object(response.content)
+
+
+def _last_tool_name(messages: list[dict[str, Any]]) -> str | None:
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            call = msg["tool_calls"][0]
+            return str(call.get("function", {}).get("name") or "")
+        if msg.get("role") == "tool":
+            continue
+    return None
+
+
+def _last_tool_result(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    for msg in reversed(messages):
+        if msg.get("role") != "tool":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+    return {}
 
 
 class MockLLMProvider(LLMProvider):
@@ -61,58 +107,342 @@ class MockLLMProvider(LLMProvider):
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int = 1200,
+        thinking: bool = False,
     ) -> LLMResponse:
+        from rolloutguard_api.ai.cancel import raise_if_cancelled
+
+        raise_if_cancelled()
         user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
         text = user if isinstance(user, str) else json.dumps(user)
 
         if tools:
-            # Agent path: match German demo chips (timeline → list → KPIs)
             lowered = text.lower()
+            last = _last_tool_name(messages)
+            tool_names = {
+                spec.get("function", {}).get("name")
+                for spec in tools
+                if isinstance(spec, dict)
+            }
+
+            def _call(name: str, arguments: dict[str, Any], call_id: str) -> LLMResponse:
+                return LLMResponse(
+                    content="",
+                    model=self.name,
+                    latency_ms=1,
+                    tool_calls=[
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": json.dumps(arguments),
+                            },
+                        }
+                    ],
+                )
+
+            wants_draft = any(
+                k in lowered
+                for k in (
+                    "mail",
+                    "e-mail",
+                    "briefing",
+                    "digest",
+                    "watch",
+                    "überwach",
+                    "aufgabe",
+                    "override",
+                    "überschreib",
+                )
+            )
+            wants_corpus = any(
+                k in lowered
+                for k in ("vertrag", "pdf", "dokument", "hochgeladen", "sow")
+            )
+            wants_diff = "neu seit" in lowered or "letzter lauf" in lowered
+            wants_explain = any(
+                token in lowered for token in ("erkläre", "erklaere", "erklär", "diesen befund")
+            )
+
+            if last == "get_portfolio_kpis":
+                tool_result = _last_tool_result(messages)
+                kpis = tool_result.get("kpis") if isinstance(tool_result.get("kpis"), dict) else {}
+                total_sites = kpis.get("sites_total") or kpis.get("total_sites") or "unbekannt"
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                f"Das Portfolio umfasst {total_sites} Standorte "
+                                f"(Lauf #{tool_result.get('analysis_run_id', '?')}). "
+                                f"Kritische Befunde: {kpis.get('findings_critical', '?')}."
+                            ),
+                            "site_ids": [],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["get_portfolio_kpis"],
+                            "abstained": False,
+                            "confidence": 0.82,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last == "list_findings":
+                tool_result = _last_tool_result(messages)
+                raw_findings = tool_result.get("findings")
+                findings = raw_findings if isinstance(raw_findings, list) else []
+                lines = [
+                    f"- {item.get('site_id')} ({item.get('rule_id')}, {item.get('severity')}): "
+                    f"{item.get('message')}"
+                    for item in findings[:3]
+                    if isinstance(item, dict)
+                ]
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "Kritische Standorte, die das nahe Integrationsziel gefährden:\n"
+                                + (
+                                    "\n".join(lines)
+                                    if lines
+                                    else "- Keine kritischen Befunde gelistet."
+                                )
+                            ),
+                            "site_ids": [
+                                str(item.get("site_id"))
+                                for item in findings[:3]
+                                if isinstance(item, dict) and item.get("site_id")
+                            ],
+                            "evidence_ids": [
+                                eid
+                                for item in findings[:3]
+                                if isinstance(item, dict)
+                                for eid in item.get("evidence_ids") or []
+                                if eid
+                            ][:12],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["list_findings"],
+                            "abstained": False,
+                            "confidence": 0.78,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last == "get_site_timeline":
+                tool_result = _last_tool_result(messages)
+                site_id = str(tool_result.get("site_id") or "DE-NRW-0107")
+                raw_events = tool_result.get("events")
+                events = raw_events if isinstance(raw_events, list) else []
+                preview = (
+                    f"Erstes Ereignis: {events[0].get('label')}"
+                    if events and isinstance(events[0], dict)
+                    else "Keine Timeline-Ereignisse gefunden."
+                )
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": f"Timeline für {site_id}: {preview}",
+                            "site_ids": [site_id],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["get_site_timeline"],
+                            "abstained": False,
+                            "confidence": 0.8,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last == "search_corpus":
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "Im synthetischen Vertrag zu DE-NRW-0107 steht die "
+                                "vertragliche Fälligkeit 15.09.2026 (doc:sow#c0)."
+                            ),
+                            "site_ids": ["DE-NRW-0107"],
+                            "evidence_ids": [],
+                            "memory_ids": ["doc:sow#c0"],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["search_corpus"],
+                            "abstained": False,
+                            "confidence": 0.8,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last == "GMAIL_CREATE_EMAIL_DRAFT":
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "E-Mail wartet auf Freigabe in der Seitenleiste. "
+                                "Erst nach Freigeben wird Gmail über Composio aufgerufen."
+                            ),
+                            "site_ids": ["DE-NRW-0107"],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["GMAIL_CREATE_EMAIL_DRAFT"],
+                            "abstained": False,
+                            "confidence": 0.85,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last == "GOOGLECALENDAR_LIST_EVENTS":
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "Kalender gelesen. Wenn Composio nicht verbunden ist, "
+                                "nutze ich die sichtbaren Befundtermine."
+                            ),
+                            "site_ids": [],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": ["GOOGLECALENDAR_LIST_EVENTS"],
+                            "abstained": False,
+                            "confidence": 0.8,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if last in {"NOTION_UPDATE_PAGE", "NOTION_CREATE_PAGE"}:
+                return LLMResponse(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "Der Befund steht auf der Demo-Notion-Seite. "
+                                "Bitte die Seite kurz prüfen."
+                            ),
+                            "site_ids": [],
+                            "evidence_ids": [],
+                            "memory_ids": [],
+                            "proposed_action_ids": [],
+                            "tool_trace": [last],
+                            "abstained": False,
+                            "confidence": 0.85,
+                        }
+                    ),
+                    model=self.name,
+                    latency_ms=1,
+                )
+            if (
+                wants_explain
+                and last != "list_findings"
+                and "list_findings" in tool_names
+                and "notion" not in lowered
+            ):
+                args: dict[str, Any] = {"limit": 5}
+                site_match = re.search(r"DE-[A-Z]+-\d+", text)
+                if site_match:
+                    args["site_id"] = site_match.group(0)
+                rule_match = re.search(r'"rule_id":\s*"([A-Z]+-\d+)"', text)
+                if rule_match:
+                    args["rule_id"] = rule_match.group(1)
+                return _call("list_findings", args, "call_mock_explain")
+            if wants_corpus and last != "search_corpus" and "search_corpus" in tool_names:
+                return _call(
+                    "search_corpus",
+                    {"query": "DE-NRW-0107 Vertrag"},
+                    "call_mock_corpus",
+                )
+            if wants_diff and last != "search_corpus" and "search_corpus" in tool_names:
+                return _call("search_corpus", {"query": "neu SLA"}, "call_mock_diff")
+            wants_calendar = any(
+                k in lowered for k in ("kalender", "termin", "calendar", "im kalender")
+            )
+            if wants_calendar and "GOOGLECALENDAR_LIST_EVENTS" in tool_names:
+                return _call("GOOGLECALENDAR_LIST_EVENTS", {}, "call_mock_calendar_list")
+            wants_notion = any(k in lowered for k in ("notion", "tabelle"))
+            if wants_notion and "NOTION_UPDATE_PAGE" in tool_names:
+                site_match = re.search(r"DE-[A-Z]+-\d+", text)
+                site_id = site_match.group(0) if site_match else "DE-NRW-0107"
+                return _call(
+                    "NOTION_UPDATE_PAGE",
+                    {
+                        "title": f"Ausnahme {site_id}",
+                        "content": f"Befund {site_id} in die Demo-Notion-Seite übertragen.",
+                        "site_id": site_id,
+                    },
+                    "call_mock_notion",
+                )
+            if wants_draft and "GMAIL_CREATE_EMAIL_DRAFT" in tool_names:
+                return _call(
+                    "GMAIL_CREATE_EMAIL_DRAFT",
+                    {
+                        "site_id": "DE-NRW-0107",
+                        "recipient_email": "partner@nordturm.demo",
+                        "subject": "SLA-Risiko DE-NRW-0107",
+                        "body": "Kritischer SLA-Befund — Freigeben für Gmail-Entwurf.",
+                    },
+                    "call_mock_draft_email",
+                )
             if "timeline" in lowered or "DE-NRW-0107" in text:
                 site_match = re.search(r"DE-[A-Z]+-\d+", text)
                 site_id = site_match.group(0) if site_match else "DE-NRW-0107"
-                call = {
-                    "id": "call_mock_timeline",
-                    "type": "function",
-                    "function": {
-                        "name": "get_site_timeline",
-                        "arguments": json.dumps({"site_id": site_id}),
-                    },
-                }
-            elif (
+                return _call(
+                    "get_site_timeline",
+                    {"site_id": site_id},
+                    "call_mock_timeline",
+                )
+            if (
                 "threaten" in lowered
                 or "september" in lowered
                 or "gefährden" in lowered
                 or "gefaehrden" in lowered
                 or ("kritisch" in lowered and "befund" in lowered)
             ):
-                call = {
-                    "id": "call_mock_findings",
-                    "type": "function",
-                    "function": {
-                        "name": "list_findings",
-                        "arguments": json.dumps({"severity": "critical", "limit": 3}),
-                    },
-                }
-            else:
-                call = {
-                    "id": "call_mock_kpis",
-                    "type": "function",
-                    "function": {
-                        "name": "get_portfolio_kpis",
-                        "arguments": json.dumps({}),
-                    },
-                }
-            return LLMResponse(content="", model=self.name, latency_ms=1, tool_calls=[call])
+                return _call(
+                    "list_findings",
+                    {"severity": "critical", "limit": 3},
+                    "call_mock_findings",
+                )
+            return _call("get_portfolio_kpis", {}, "call_mock_kpis")
 
-        # Explanation path (must win over blocker keyword present inside JSON packets)
+        if "Question (untrusted user text)" in text:
+            site_match = re.search(r"DE-[A-Z]+-\d+", text)
+            rule_match = re.search(r'"rule_id":\s*"([A-Z]+-\d+)"', text)
+            site_id = site_match.group(0) if site_match else "DE-NRW-0107"
+            rule_id = rule_match.group(1) if rule_match else "SLA-001"
+            return LLMResponse(
+                content=json.dumps(
+                    {
+                        "answer": (
+                            f"{site_id} · {rule_id}: Forecast liegt nach der "
+                            "vertraglichen Fälligkeit. Die Schwere kommt aus der Regel, "
+                            "nicht aus der KI."
+                        ),
+                        "site_ids": [site_id],
+                        "evidence_ids": [],
+                        "memory_ids": [],
+                        "proposed_action_ids": [],
+                        "tool_trace": ["selected_finding"],
+                        "abstained": False,
+                        "confidence": 0.78,
+                    }
+                ),
+                model=self.name,
+                latency_ms=1,
+            )
+
         if (
             "explain this deterministic finding" in text.lower()
             or "erkläre diesen deterministischen befund" in text.lower()
             or '"rule_id"' in text
         ):
             evidence_ids = re.findall(r"E-[A-Z]+-\d+", text)
-            payload = {
+            payload: dict[str, Any] = {
                 "summary": (
                     "Die Integration ist nach der vertraglichen Fälligkeit geplant; "
                     "Fibre-Ready und Neuplanung prüfen."
@@ -141,13 +471,17 @@ class MockLLMProvider(LLMProvider):
                 latency_ms=1,
             )
 
-        if "blocker note" in text.lower() or "classify" in text.lower():
+        if (
+            "blocker" in text.lower()
+            or "classify" in text.lower()
+            or "klassifiziere" in text.lower()
+        ):
             payload = {
                 "blocker_category": "BACKHAUL_READINESS",
                 "confidence": 0.92,
                 "abstained": False,
             }
-        elif "map" in text.lower() or "header" in text.lower():
+        elif "map" in text.lower() or "header" in text.lower() or "spalte" in text.lower():
             payload = {
                 "canonical_field": "forecast_date",
                 "confidence": 0.88,
@@ -171,8 +505,8 @@ class MockLLMProvider(LLMProvider):
         )
 
 
-class OpenCodeZenProvider(LLMProvider):
-    name = "opencode-zen"
+class DeepSeekProvider(LLMProvider):
+    name = "deepseek"
 
     def __init__(
         self,
@@ -180,14 +514,21 @@ class OpenCodeZenProvider(LLMProvider):
         api_key: str,
         base_url: str,
         model: str,
-        reasoning_effort: str | None = "medium",
-        timeout_s: float = 90.0,
+        reasoning_effort: str = "low",
+        timeout_s: float = 20.0,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
-        self.reasoning_effort = (reasoning_effort or "").strip().lower() or None
+        self.reasoning_effort = reasoning_effort.strip().lower()
         self.timeout_s = timeout_s
+
+    def _reasoning_effort(self, *, thinking: bool | None) -> str | None:
+        effort = self.reasoning_effort
+        use_thinking = thinking if thinking is not None else effort != "disabled"
+        if not use_thinking or effort == "disabled":
+            return None
+        return effort if effort in {"low", "high", "max"} else "low"
 
     def complete(
         self,
@@ -196,26 +537,36 @@ class OpenCodeZenProvider(LLMProvider):
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int = 1600,
+        thinking: bool | None = None,
     ) -> LLMResponse:
         import time
 
+        reasoning_effort = self._reasoning_effort(thinking=thinking)
+        if tools:
+            reasoning_effort = None
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
+            "thinking": {"type": "enabled" if reasoning_effort else "disabled"},
         }
-        if self.reasoning_effort in {"low", "medium", "high"}:
-            payload["reasoning_effort"] = self.reasoning_effort
+        if reasoning_effort:
+            payload["reasoning_effort"] = reasoning_effort
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         else:
-            # Structured JSON tasks (explain / classify) — improves reliability vs prose.
             payload["response_format"] = {"type": "json_object"}
 
+        from rolloutguard_api.ai.cancel import raise_if_cancelled, watch_client_close
+
+        raise_if_cancelled()
         started = time.perf_counter()
-        with httpx.Client(timeout=self.timeout_s) as client:
+        timeout = httpx.Timeout(self.timeout_s, connect=min(5.0, self.timeout_s))
+        client = httpx.Client(timeout=timeout)
+        abort_watch = watch_client_close(client)
+        try:
             try:
                 response = client.post(
                     f"{self.base_url}/chat/completions",
@@ -227,7 +578,7 @@ class OpenCodeZenProvider(LLMProvider):
                 )
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
-                # Some Zen models reject response_format — retry once without it.
+                raise_if_cancelled()
                 if (
                     not tools
                     and "response_format" in payload
@@ -246,18 +597,54 @@ class OpenCodeZenProvider(LLMProvider):
                     response.raise_for_status()
                 else:
                     raise
+            except (httpx.HTTPError, RuntimeError):
+                raise_if_cancelled()
+                raise
             data = response.json()
+        finally:
+            abort_watch.set()
+            client.close()
+        raise_if_cancelled()
         latency_ms = int((time.perf_counter() - started) * 1000)
 
-        choice = data["choices"][0]["message"]
+        try:
+            choice = message_from_completion(data)
+        except ValueError as exc:
+            log.warning(
+                "deepseek_unexpected_payload",
+                error=str(exc),
+                keys=list(data) if isinstance(data, dict) else type(data).__name__,
+            )
+            return LLMResponse(
+                content=json.dumps(
+                    {
+                        "answer": (
+                            "Die KI-Antwort ist gerade nicht verfügbar. "
+                            "Bitte die Frage erneut senden."
+                        ),
+                        "site_ids": [],
+                        "evidence_ids": [],
+                        "memory_ids": [],
+                        "proposed_action_ids": [],
+                        "tool_trace": [],
+                        "abstained": True,
+                        "confidence": 0.0,
+                    }
+                ),
+                model=data.get("model", self.model) if isinstance(data, dict) else self.model,
+                latency_ms=latency_ms,
+                raw=data if isinstance(data, dict) else None,
+            )
         tool_calls = choice.get("tool_calls")
         content = choice.get("content") or ""
+        reasoning = choice.get("reasoning_content") or choice.get("reasoning")
         return LLMResponse(
             content=content,
             model=data.get("model", self.model),
             latency_ms=latency_ms,
             raw=data,
             tool_calls=tool_calls,
+            reasoning_content=reasoning if isinstance(reasoning, str) else None,
         )
 
 
@@ -266,7 +653,6 @@ def extract_json_object(text: str) -> dict[str, Any]:
     if not text:
         raise ValueError("Empty model response")
 
-    # Strip common markdown code fences before parsing.
     fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.IGNORECASE)
     if fenced:
         text = fenced.group(1).strip()
@@ -286,13 +672,27 @@ def extract_json_object(text: str) -> dict[str, Any]:
     return value
 
 
+def llm_mock_reason(*, force_mock: bool = False) -> str | None:
+    """Return why the deterministic mock is active, or None when live LLM is configured."""
+    settings = get_settings()
+    if force_mock:
+        return "force_mock"
+    if not settings.has_deepseek_api_key:
+        return "no_api_key"
+    if not settings.llm_enabled:
+        return "llm_disabled"
+    return None
+
+
 def get_llm_provider(*, force_mock: bool = False) -> LLMProvider:
     settings = get_settings()
-    if force_mock or not settings.llm_enabled or not settings.opencode_api_key:
+    reason = llm_mock_reason(force_mock=force_mock)
+    if reason:
+        log.info("llm_using_mock", reason=reason)
         return MockLLMProvider()
-    return OpenCodeZenProvider(
-        api_key=settings.opencode_api_key,
-        base_url=settings.opencode_base_url,
-        model=settings.opencode_model,
-        reasoning_effort=settings.opencode_reasoning_effort,
+    return DeepSeekProvider(
+        api_key=settings.deepseek_api_key,
+        base_url=settings.deepseek_base_url,
+        model=settings.deepseek_model,
+        reasoning_effort=settings.deepseek_reasoning_effort,
     )

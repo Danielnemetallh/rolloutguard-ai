@@ -1,61 +1,53 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { EvidenceChips } from '@/components/EvidenceChips'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { describeApiError } from '@/lib/api'
-import { statusLabel, timelineLabel } from '@/lib/labels'
-import { cn } from '@/lib/utils'
-import type { ExplainResult, Finding, Timeline } from '../types'
+import { ruleLabel, severityBadgeVariant, severityLabel, statusLabel, timelineLabel } from '@/lib/labels'
+import type { Finding, Timeline } from '../types'
 
 type InspectorProps = {
   selected: Finding | null
   loading?: boolean
   timeline: Timeline | undefined
-  timelineError: Error | null
-  onTimelineRetry: () => void
-  explainPending: boolean
-  explainError: Error | null
   reviewPending: boolean
   reviewClosed: boolean
-  reviewError: Error | null
+  reviewError: boolean
   reviewSuccess: boolean
-  explainResult: ExplainResult | undefined
-  highlightedEvidenceId: string | null
   showBackLink?: boolean
-  onExplain: () => void
-  onExplainRetry: () => void
   onApprove: () => void
   onDismiss: () => void
-  onEvidenceHighlight: (id: string) => void
 }
 
 function formatTimelineValue(value: string | null) {
   return value ?? 'k. A.'
 }
 
+function formatFact(key: string, value: unknown) {
+  if (value == null || value === '') return 'k. A.'
+  if (Array.isArray(value)) {
+    const mapped = value.map((item) =>
+      typeof item === 'string' && (key === 'missing_sources' || key === 'present')
+        ? timelineLabel(item)
+        : String(item),
+    )
+    return mapped.join(', ')
+  }
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
 export function Inspector({
   selected,
   loading = false,
   timeline,
-  timelineError,
-  onTimelineRetry,
-  explainPending,
-  explainError,
   reviewPending,
   reviewClosed,
   reviewError,
   reviewSuccess,
-  explainResult,
-  highlightedEvidenceId,
   showBackLink = false,
-  onExplain,
-  onExplainRetry,
   onApprove,
   onDismiss,
-  onEvidenceHighlight,
 }: InspectorProps) {
   const [armedAction, setArmedAction] = useState<'approve' | 'dismiss' | null>(null)
 
@@ -82,51 +74,48 @@ export function Inspector({
   }
 
   return (
-    <Card className="flex min-h-[420px] flex-col overflow-hidden" aria-label="Inspektor">
-      <CardHeader className="border-b border-border py-3">
+    <section className="min-h-[420px] overflow-hidden border border-border bg-[var(--surface-raised)]" aria-label="Inspektor">
+      <header className="border-b border-border px-5 py-4">
         {showBackLink && (
           <Link
             to="/"
-            className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
+            className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary"
           >
             <ArrowLeft className="size-3.5" strokeWidth={2} />
             Zurück zur Warteschlange
           </Link>
         )}
-        <CardTitle>Inspektor</CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 space-y-4 overflow-auto p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Befundprüfung</p>
+        <h1 className="mt-1 text-xl font-semibold tracking-[-0.02em]">Inspektor</h1>
+      </header>
+      <div className="space-y-0">
         {loading && (
-          <p className="text-sm text-muted-foreground">Lade Befund…</p>
+          <p className="px-5 py-8 text-sm text-muted-foreground">Lade Befund…</p>
         )}
         {!loading && !selected && (
-          <p className="text-sm text-muted-foreground">
+          <p className="px-5 py-8 text-sm text-muted-foreground">
             Befund nicht gefunden. Starte eine Analyse und wähle einen Eintrag in der
             Warteschlange.
           </p>
         )}
         {selected && (
           <>
-            <div className="space-y-2">
-              <p className="font-mono text-xs text-muted-foreground">
-                {selected.rule_id} · {selected.site_id}
-              </p>
-              <Badge variant="outline">{statusLabel(selected.status)}</Badge>
-              <p className="text-sm leading-relaxed">{selected.message}</p>
+            <section className="px-5 py-5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <Badge variant={severityBadgeVariant(selected.severity)}>
+                  {severityLabel(selected.severity)}
+                </Badge>
+                <span className="font-mono text-xs text-muted-foreground">{selected.rule_id}</span>
+                <span className="font-mono text-xs text-muted-foreground">{selected.site_id}</span>
+                <Badge variant="outline" className="ml-auto">{statusLabel(selected.status)}</Badge>
+              </div>
+              <h2 className="mt-4 text-lg font-semibold tracking-[-0.015em]">{ruleLabel(selected.rule_id)}</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">{selected.message}</p>
 
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="mt-5 flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
-                  onClick={onExplain}
-                  disabled={explainPending}
-                >
-                  {explainPending ? 'Erkläre…' : 'KI erklären'}
-                </Button>
-                <Button
-                  type="button"
-                  variant={armedAction === 'approve' ? 'default' : 'outline'}
                   size="sm"
                   onClick={handleApprove}
                   disabled={reviewPending || reviewClosed}
@@ -134,23 +123,23 @@ export function Inspector({
                   {reviewPending
                     ? 'Speichere…'
                     : armedAction === 'approve'
-                      ? 'Bestätigen'
-                      : 'Freigeben'}
+                      ? 'Bestätigung speichern'
+                      : 'Befund bestätigen'}
                 </Button>
                 <Button
                   type="button"
-                  variant={armedAction === 'dismiss' ? 'default' : 'outline'}
+                  variant="outline"
                   size="sm"
                   onClick={handleDismiss}
                   disabled={reviewPending || reviewClosed}
                 >
-                  {armedAction === 'dismiss' ? 'Verwerfen bestätigen' : 'Verwerfen'}
+                  {armedAction === 'dismiss' ? 'Fehlalarm speichern' : 'Als Fehlalarm markieren'}
                 </Button>
               </div>
 
               {reviewError && (
                 <p className="text-sm text-[var(--warn)]">
-                  Prüfung konnte nicht gespeichert werden: {describeApiError(reviewError)}
+                  Prüfung konnte nicht gespeichert werden. Läuft die API?
                 </p>
               )}
               {reviewSuccess && reviewClosed && (
@@ -159,108 +148,38 @@ export function Inspector({
                 </p>
               )}
 
-              {explainError && (
-                <div className="flex items-center justify-between gap-3 text-sm text-[var(--warn)]" role="alert">
-                  <span>
-                    KI-Erklärung konnte nicht geladen werden: {describeApiError(explainError)}
-                  </span>
-                  <Button type="button" variant="outline" size="sm" onClick={onExplainRetry}>
-                    Erneut versuchen
-                  </Button>
-                </div>
-              )}
+            </section>
 
-              {explainResult && (
-                <Card className="bg-muted/40">
-                  <CardContent className="space-y-2 pt-4">
-                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      KI-Erklärung
-                    </p>
-                    <p className="text-sm">{explainResult.explanation.summary}</p>
-                    {explainResult.explanation.proposed_next_action && (
-                      <p className="text-sm">
-                        <strong>Nächster Schritt:</strong>{' '}
-                        {explainResult.explanation.proposed_next_action}
-                      </p>
-                    )}
-                    <EvidenceChips
-                      ids={explainResult.explanation.evidence_ids}
-                      onSelect={onEvidenceHighlight}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Kategorie={explainResult.explanation.blocker_category ?? 'k. A.'} ·
-                      Konfidenz={explainResult.explanation.confidence} ·
-                      Enthaltung={String(explainResult.explanation.abstained)}
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Quellzellen
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm">
-                  {selected.evidence.map((e) => (
-                    <li
-                      key={e.evidence_id}
-                      id={`evidence-${e.evidence_id}`}
-                      className={cn(
-                        'rounded-md border border-transparent px-2 py-1 font-mono text-xs transition-colors',
-                        highlightedEvidenceId === e.evidence_id &&
-                          'border-primary bg-accent/80',
-                      )}
-                    >
-                      <code className="text-primary">{e.evidence_id}</code>{' '}
-                      {e.file} / {e.sheet} r{e.row} · {e.column}
-                      {e.value != null && (
-                        <span className="text-muted-foreground"> = {e.value}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-
-            {timelineError && (
-              <Card>
-                <CardContent className="flex items-center justify-between gap-3 pt-4 text-sm text-[var(--warn)]">
-                  <p role="alert">
-                    Timeline konnte nicht geladen werden: {describeApiError(timelineError)}
-                  </p>
-                  <Button type="button" variant="outline" size="sm" onClick={onTimelineRetry}>
-                    Erneut versuchen
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {timeline && !timelineError && (
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Standort-Timeline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className="divide-y divide-border text-sm">
-                    {Object.entries(timeline.timeline).map(([k, v]) => (
-                      <div key={k} className="grid grid-cols-2 gap-2 py-2">
+            {Object.keys(selected.facts).length > 0 && (
+              <section className="border-t border-border px-5 py-5">
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Fakten</h2>
+                  <dl className="mt-3 divide-y divide-border border-y border-border text-sm">
+                    {Object.entries(selected.facts).map(([k, v]) => (
+                      <div key={k} className="grid grid-cols-2 gap-4 py-2.5">
                         <dt className="text-muted-foreground">{timelineLabel(k)}</dt>
-                        <dd className="font-mono text-xs">{formatTimelineValue(v)}</dd>
+                        <dd className="text-right font-mono text-xs">{formatFact(k, v)}</dd>
                       </div>
                     ))}
                   </dl>
-                </CardContent>
-              </Card>
+              </section>
+            )}
+
+            {timeline && (
+              <section className="border-t border-border px-5 py-5">
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Standort-Timeline</h2>
+                  <dl className="mt-3 divide-y divide-border border-y border-border text-sm">
+                    {Object.entries(timeline.timeline).map(([k, v]) => (
+                      <div key={k} className="grid grid-cols-2 gap-4 py-2.5">
+                        <dt className="text-muted-foreground">{timelineLabel(k)}</dt>
+                        <dd className="text-right font-mono text-xs">{formatTimelineValue(v)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+              </section>
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

@@ -1,4 +1,4 @@
-"""Optional live smoke test against OpenCode Zen (skipped without key)."""
+"""Optional live smoke test against DeepSeek (skipped without key)."""
 
 from __future__ import annotations
 
@@ -13,17 +13,16 @@ load_dotenv(REPO_ROOT / ".env")
 
 
 @pytest.mark.skipif(
-    not os.getenv("OPENCODE_API_KEY") or os.getenv("SKIP_LIVE_LLM") == "1",
-    reason="No OpenCode API key configured",
+    not os.getenv("DEEPSEEK_API_KEY") or os.getenv("SKIP_LIVE_LLM") == "1",
+    reason="No DeepSeek API key configured",
 )
-def test_live_opencode_zen_json_smoke() -> None:
-    from rolloutguard_api.ai.provider import OpenCodeZenProvider, extract_json_object
+def test_live_deepseek_json_smoke() -> None:
+    from rolloutguard_api.ai.provider import DeepSeekProvider, extract_json_object
 
-    provider = OpenCodeZenProvider(
-        api_key=os.environ["OPENCODE_API_KEY"],
-        base_url=os.getenv("OPENCODE_BASE_URL", "https://opencode.ai/zen/v1"),
-        model=os.getenv("OPENCODE_MODEL", "deepseek-v4-flash-free"),
-        reasoning_effort=os.getenv("OPENCODE_REASONING_EFFORT", "medium"),
+    provider = DeepSeekProvider(
+        api_key=os.environ["DEEPSEEK_API_KEY"],
+        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
         timeout_s=120.0,
     )
     response = provider.complete(
@@ -36,34 +35,27 @@ def test_live_opencode_zen_json_smoke() -> None:
         ],
         temperature=0.0,
         max_tokens=800,
+        thinking=False,
     )
-    assert response.content, "Zen returned empty content"
+    assert response.content, "DeepSeek returned empty content"
     data = extract_json_object(response.content)
     assert data.get("ok") is True
     echo = str(data.get("echo", "")).lower()
     assert "rollout" in echo
 
-    # Confirm thinking/reasoning path produced some internal reasoning when enabled
-    msg = (response.raw or {}).get("choices", [{}])[0].get("message", {})
-    reasoning = msg.get("reasoning_content") or msg.get("reasoning") or ""
-    assert isinstance(reasoning, str)
-    # Medium effort should usually produce reasoning_content on DeepSeek free
-    assert len(reasoning) > 0, "Expected reasoning_content with medium thinking"
-
 
 @pytest.mark.skipif(
-    not os.getenv("OPENCODE_API_KEY") or os.getenv("SKIP_LIVE_LLM") == "1",
-    reason="No OpenCode API key configured",
+    not os.getenv("DEEPSEEK_API_KEY") or os.getenv("SKIP_LIVE_LLM") == "1",
+    reason="No DeepSeek API key configured",
 )
 def test_live_explain_finding_deepseek() -> None:
     from rolloutguard_api.ai.enrichment import explain_finding
-    from rolloutguard_api.ai.provider import OpenCodeZenProvider
+    from rolloutguard_api.ai.provider import DeepSeekProvider
 
-    provider = OpenCodeZenProvider(
-        api_key=os.environ["OPENCODE_API_KEY"],
-        base_url=os.getenv("OPENCODE_BASE_URL", "https://opencode.ai/zen/v1"),
-        model=os.getenv("OPENCODE_MODEL", "deepseek-v4-flash-free"),
-        reasoning_effort=os.getenv("OPENCODE_REASONING_EFFORT", "medium"),
+    provider = DeepSeekProvider(
+        api_key=os.environ["DEEPSEEK_API_KEY"],
+        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
         timeout_s=120.0,
     )
     evidence = [
@@ -94,6 +86,5 @@ def test_live_explain_finding_deepseek() -> None:
         provider=provider,
     )
     assert result.summary
-    assert result.abstained is False or result.confidence >= 0.0
     if not result.abstained:
         assert set(result.evidence_ids) <= {"E-CONTRACT-1", "E-SCHEDULE-2"}

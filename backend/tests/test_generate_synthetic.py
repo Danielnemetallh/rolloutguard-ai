@@ -14,6 +14,8 @@ def test_generate_synthetic_workbooks(tmp_path: Path) -> None:
     assert paths["schedule"].exists()
     assert paths["status"].exists()
     assert paths["manifest"].exists()
+    assert paths["sow"].exists()
+    assert "DE-NRW-0107" in paths["sow"].name or paths["sow"].suffix == ".pdf"
 
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
     assert manifest["site_count"] >= 40

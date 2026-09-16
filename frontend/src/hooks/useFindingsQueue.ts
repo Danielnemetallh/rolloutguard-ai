@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { useCallback, useState } from 'react'
-import { apiFetch } from '@/lib/api'
+import { useState } from 'react'
+import { API_BASE } from '@/lib/api'
 import type { Finding, HeroFinding, SortKey } from '../types'
 
 export function useFindingsQueue(
@@ -16,10 +16,11 @@ export function useFindingsQueue(
   const findings = useQuery({
     queryKey: ['findings', analysisId],
     enabled: analysisId != null,
-    queryFn: () =>
-      apiFetch<{ count: number; findings: Finding[] }>(
-        `/api/analyses/${analysisId!}/findings`,
-      ),
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/analyses/${analysisId}/findings`)
+      if (!res.ok) throw new Error(await res.text())
+      return res.json() as Promise<{ count: number; findings: Finding[] }>
+    },
   })
 
   const findingsLoading =
@@ -45,43 +46,39 @@ export function useFindingsQueue(
       return a[sortKey] < b[sortKey] ? -1 * dir : a[sortKey] > b[sortKey] ? 1 * dir : 0
     })
 
-  const toggleSort = useCallback((key: SortKey) => {
+  const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else {
       setSortKey(key)
       setSortDir('asc')
     }
-  }, [sortKey])
+  }
 
   const showHeroHints = analysisId != null && !search.trim() && !!heroFindings?.length
 
-  const matchHeroFinding = useCallback(
-    (hero: HeroFinding) =>
-      mappedFindings.find(
-        (f) =>
-          f.rule_id === hero.rule_id &&
-          f.site_id === hero.site_id &&
-          f.message === hero.message,
-      ) ?? mappedFindings.find((f) => f.rule_id === hero.rule_id && f.site_id === hero.site_id),
-    [mappedFindings],
-  )
+  const matchHeroFinding = (hero: HeroFinding) =>
+    mappedFindings.find(
+      (f) =>
+        f.rule_id === hero.rule_id &&
+        f.site_id === hero.site_id &&
+        f.message === hero.message,
+    ) ?? mappedFindings.find((f) => f.rule_id === hero.rule_id && f.site_id === hero.site_id)
+
   return {
     findings: mappedFindings,
     totalCount: findings.data?.count,
     visibleFindings,
     findingsLoading,
+    findingsError: findings.isError,
     search,
     severity,
     sortKey,
     sortDir,
     showHeroHints,
-    findingsError: findings.error ?? null,
-    retryFindings: () => {
-      void findings.refetch()
-    },
     matchHeroFinding,
     onSearchChange: setSearch,
     onSeverityChange: setSeverity,
     onToggleSort: toggleSort,
+    retryFindings: () => void findings.refetch(),
   }
 }

@@ -160,3 +160,114 @@ class ExportRow(Base):
     storage_key: Mapped[str] = mapped_column(String(1024))
     created_by: Mapped[str] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProposedAction(Base):
+    __tablename__ = "proposed_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    analysis_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("analysis_runs.id"), nullable=True
+    )
+    action_type: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    site_ids_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    evidence_ids_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    idempotency_key: Mapped[str | None] = mapped_column(String(256), nullable=True, index=True)
+    result_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AgentMessage(Base):
+    __tablename__ = "agent_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    analysis_run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"), index=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36), index=True, default="", server_default=""
+    )
+    role: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text)
+    tool_trace_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    citation_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DecisionEvent(Base):
+    __tablename__ = "decision_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    site_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    rule_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(512))
+    mime: Mapped[str] = mapped_column(String(128))
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    storage_key: Mapped[str] = mapped_column(String(1024))
+    extract_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    chunks: Mapped[list[DocumentChunk]] = relationship(back_populates="document")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    site_ids_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    token_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    document: Mapped[Document] = relationship(back_populates="chunks")
+
+
+class SiteSummary(Base):
+    __tablename__ = "site_summaries"
+    __table_args__ = (UniqueConstraint("site_id", "analysis_run_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site_id: Mapped[str] = mapped_column(String(64), index=True)
+    analysis_run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MilestoneOverride(Base):
+    __tablename__ = "milestone_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    site_id: Mapped[str] = mapped_column(String(64), index=True)
+    field: Mapped[str] = mapped_column(String(64))
+    new_value: Mapped[str] = mapped_column(String(256))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_ids_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Watch(Base):
+    __tablename__ = "watches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    site_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    partner_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rule_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="armed")
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

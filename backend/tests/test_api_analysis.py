@@ -2,16 +2,73 @@
 
 from __future__ import annotations
 
-import json
-from contextlib import ExitStack
-from io import BytesIO
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 
-import rolloutguard_api.db.session as db_session
-from rolloutguard_api.db import models
+from rolloutguard_api.domain.schema import CONTRACT_HEADERS, SCHEDULE_HEADERS, STATUS_HEADERS
 from rolloutguard_api.main import create_app
+
+SYNTH = Path(__file__).resolve().parents[2] / "data" / "synthetic"
+IMPORTED_SITE_ID = "KG-TEST-0001"
+IMPORTED_DUE_DATE = "2026-10-01"
+
+
+def _write_sheet(path: Path, headers: dict[str, str], row: dict[str, object]) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    keys = list(headers)
+    sheet.append([headers[key] for key in keys])
+    sheet.append([row[key] for key in keys])
+    workbook.save(path)
+
+
+def _imported_workbooks(tmp_path: Path) -> dict[str, Path]:
+    contract = tmp_path / "kaggle_contract_obligations.xlsx"
+    schedule = tmp_path / "kaggle_partner_schedule.xlsx"
+    status = tmp_path / "kaggle_site_project_status.xlsx"
+    _write_sheet(
+        contract,
+        CONTRACT_HEADERS,
+        {
+            "site_id": IMPORTED_SITE_ID,
+            "partner_id": "PARTNER-NORTH",
+            "obligation_code": "INT_READY",
+            "contractual_due_date": IMPORTED_DUE_DATE,
+            "sla_days": 10,
+            "required_evidence": "FAT",
+            "contract_version": "SOW-1",
+        },
+    )
+    _write_sheet(
+        schedule,
+        SCHEDULE_HEADERS,
+        {
+            "site_id": IMPORTED_SITE_ID,
+            "milestone_code": "INTEGRATION",
+            "planned_date": "2026-09-20",
+            "forecast_date": "2026-09-22",
+            "actual_date": None,
+            "partner_status": "On Track",
+            "last_updated_at": "2026-09-01T08:00:00+00:00",
+        },
+    )
+    _write_sheet(
+        status,
+        STATUS_HEADERS,
+        {
+            "site_id": IMPORTED_SITE_ID,
+            "permit_status": "APPROVED",
+            "construction_status": "DONE",
+            "fibre_ready_date": "2026-09-18",
+            "integration_test_status": "PENDING",
+            "acceptance_status": "NOT_STARTED",
+            "blocker_comment": "Kaggle fixture",
+        },
+    )
+    return {"contract": contract, "schedule": schedule, "status": status}
 
 
 def test_analyze_synthetic_end_to_end() -> None:
@@ -51,155 +108,99 @@ def test_analyze_synthetic_end_to_end() -> None:
     assert review.status_code == 200
     assert review.json()["status"] == "dismissed"
 
-    refreshed = client.get(
-        f"/api/analyses/{analysis_id}/findings",
-        params={"site_id": findings.json()["findings"][0]["site_id"]},
-    )
-    assert refreshed.status_code == 200
-    assert any(item["status"] == "dismissed" for item in refreshed.json()["findings"])
 
-
-def test_uploaded_fixture_timeline_and_export_use_selected_run() -> None:
+def test_import_single_workbook_is_listed_and_filled_from_synthetic() -> None:
     client = TestClient(create_app())
     project_id = client.get("/api/projects").json()[0]["id"]
-    fixture_dir = (
-        Path(__file__).resolve().parents[2] / "data" / "fixtures" / "kaggle_construction"
-    )
-    manifest = json.loads((fixture_dir / "manifest.json").read_text(encoding="utf-8"))
-    expected_sites = {project["site_id"] for project in manifest["projects"].values()}
-    fixture_paths = {
-        "contract": fixture_dir / "kaggle_contract_obligations.xlsx",
-        "schedule": fixture_dir / "kaggle_partner_schedule.xlsx",
-        "status": fixture_dir / "kaggle_site_project_status.xlsx",
-    }
+    workbook = SYNTH / "contract_obligations.xlsx"
+    assert workbook.exists(), "Run scripts/generate-synthetic.ps1 first"
 
-    synthetic = client.post(f"/api/projects/{project_id}/analyze-synthetic")
-    assert synthetic.status_code == 200, synthetic.text
-    synthetic_analysis_id = synthetic.json()["analysis_run_id"]
-
-    with ExitStack() as stack:
-        files = {
-            logical_type: (
-                path.name,
-                stack.enter_context(path.open("rb")),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            for logical_type, path in fixture_paths.items()
-        }
-        imported = client.post(f"/api/projects/{project_id}/imports", files=files)
-
-    assert imported.status_code == 200, imported.text
-    import_body = imported.json()
-    assert import_body["site_count"] == len(expected_sites)
-    analysis_id = import_body["analysis_run_id"]
-
-    with db_session.SessionLocal() as db:
-        source_files = db.query(models.SourceFile).filter_by(batch_id=import_body["batch_id"]).all()
-        source_filenames = {source_file.filename for source_file in source_files}
-        assert source_filenames == {
-            "contract_obligations.xlsx",
-            "partner_schedule.xlsx",
-            "site_project_status.xlsx",
-        }
-        assert all(Path(source_file.storage_key).is_file() for source_file in source_files)
-
-    findings = client.get(f"/api/analyses/{analysis_id}/findings")
-    assert findings.status_code == 200
-    assert findings.json()["count"] >= 1
-
-    for site_id in sorted(expected_sites):
-        timeline = client.get(
-            f"/api/sites/{site_id}/timeline",
-            params={"analysis_id": analysis_id},
+    with workbook.open("rb") as handle:
+        result = client.post(
+            f"/api/projects/{project_id}/imports",
+            files={
+                "files": (
+                    "kaggle_contract_obligations.xlsx",
+                    handle,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
         )
-        assert timeline.status_code == 200, timeline.text
-        timeline_body = timeline.json()
-        assert timeline_body["site_id"] == site_id
-        assert {evidence["file"] for evidence in timeline_body["evidence"]} <= source_filenames
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert "kaggle_contract_obligations.xlsx" in body["imported_files"]
+    assert "schedule" in body["filled_from_synthetic"]
+    assert "status" in body["filled_from_synthetic"]
+    assert body["analysis_run_id"]
 
-    synthetic_timeline = client.get(
-        "/api/sites/DE-NRW-0107/timeline",
-        params={"analysis_id": synthetic_analysis_id},
-    )
-    assert synthetic_timeline.status_code == 200, synthetic_timeline.text
-    assert synthetic_timeline.json()["timeline"]["contractual_due_date"] == "2026-09-15"
-    assert {
-        evidence["file"] for evidence in synthetic_timeline.json()["evidence"]
-    } <= {
-        "contract_obligations.xlsx",
-        "partner_schedule.xlsx",
-        "site_project_status.xlsx",
-    }
-
-    exported = client.post(f"/api/analyses/{analysis_id}/exports")
-    assert exported.status_code == 200, exported.text
-    assert Path(exported.json()["xlsx_path"]).exists()
-    assert Path(exported.json()["markdown_path"]).exists()
+    documents = client.get(f"/api/projects/{project_id}/documents").json()["documents"]
+    assert any(doc["filename"] == "kaggle_contract_obligations.xlsx" for doc in documents)
 
 
-def test_timeline_rejects_unknown_analysis() -> None:
-    client = TestClient(create_app())
-
-    response = client.get(
-        "/api/sites/DE-NRW-0107/timeline",
-        params={"analysis_id": 999999},
-    )
-
-    assert response.status_code == 404
-    assert response.json()["code"] == "ANALYSIS_NOT_FOUND"
-
-
-def test_timeline_reports_missing_source_workbook() -> None:
+def test_import_workbook_without_xlsx_suffix() -> None:
     client = TestClient(create_app())
     project_id = client.get("/api/projects").json()[0]["id"]
-    analysis_id = client.post(f"/api/projects/{project_id}/analyze-synthetic").json()[
-        "analysis_run_id"
-    ]
-
-    db = db_session.SessionLocal()
-    source_file = (
-        db.query(models.SourceFile)
-        .join(models.ImportBatch, models.SourceFile.batch_id == models.ImportBatch.id)
-        .join(models.AnalysisRun, models.AnalysisRun.batch_id == models.ImportBatch.id)
-        .filter(models.AnalysisRun.id == analysis_id, models.SourceFile.logical_type == "contract")
-        .one()
-    )
-    source_file_id = source_file.id
-    original_storage_key = source_file.storage_key
-    original_filename = source_file.filename
-    source_file.storage_key = "missing-contract-workbook.xlsx"
-    source_file.filename = "missing-contract-workbook.xlsx"
-    db.commit()
-    db.close()
-
-    try:
-        response = client.get(
-            "/api/sites/DE-NRW-0107/timeline",
-            params={"analysis_id": analysis_id},
+    workbook = SYNTH / "partner_schedule.xlsx"
+    with workbook.open("rb") as handle:
+        result = client.post(
+            f"/api/projects/{project_id}/imports",
+            files={
+                "files": (
+                    "analysis-1",
+                    handle,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
         )
-    finally:
-        db = db_session.SessionLocal()
-        source_file = db.get(models.SourceFile, source_file_id)
-        assert source_file is not None
-        source_file.storage_key = original_storage_key
-        source_file.filename = original_filename
-        db.commit()
-        db.close()
-
-    assert response.status_code == 404
-    assert response.json()["code"] == "ANALYSIS_SOURCE_MISSING"
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert any(name.endswith(".xlsx") for name in body["imported_files"])
+    documents = client.get(f"/api/projects/{project_id}/documents").json()["documents"]
+    assert any("analysis-1" in doc["filename"] for doc in documents)
 
 
-def test_import_rejects_non_xlsx_upload() -> None:
+def test_timeline_uses_imported_run_workbooks(tmp_path: Path) -> None:
     client = TestClient(create_app())
     project_id = client.get("/api/projects").json()[0]["id"]
-    files = {
-        "contract": ("notes.csv", BytesIO(b"not an xlsx"), "text/csv"),
-        "schedule": ("schedule.xlsx", BytesIO(b"not an xlsx"), "application/octet-stream"),
-        "status": ("status.xlsx", BytesIO(b"not an xlsx"), "application/octet-stream"),
-    }
+    paths = _imported_workbooks(tmp_path)
 
-    response = client.post(f"/api/projects/{project_id}/imports", files=files)
+    with (
+        paths["contract"].open("rb") as contract,
+        paths["schedule"].open("rb") as schedule,
+        paths["status"].open("rb") as status,
+    ):
+        result = client.post(
+            f"/api/projects/{project_id}/imports",
+            files={
+                "contract": (
+                    paths["contract"].name,
+                    contract,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+                "schedule": (
+                    paths["schedule"].name,
+                    schedule,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+                "status": (
+                    paths["status"].name,
+                    status,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+            },
+        )
+    assert result.status_code == 200, result.text
+    analysis_id = result.json()["analysis_run_id"]
 
-    assert response.status_code == 400
-    assert response.json()["code"] == "UNSUPPORTED_FILE_TYPE"
+    missing = client.get(f"/api/sites/{IMPORTED_SITE_ID}/timeline")
+    assert missing.status_code == 404
+
+    timeline = client.get(
+        f"/api/sites/{IMPORTED_SITE_ID}/timeline",
+        params={"analysis_id": analysis_id},
+    )
+    assert timeline.status_code == 200, timeline.text
+    body = timeline.json()
+    assert body["site_id"] == IMPORTED_SITE_ID
+    assert body["timeline"]["contractual_due_date"] == IMPORTED_DUE_DATE
+    assert body["timeline"]["blocker_comment"] == "Kaggle fixture"

@@ -1,7 +1,19 @@
-export const QUESTION_CHIPS = [
-  'Welche drei Standorte gefährden das September-Integrationsziel — und warum?',
-  'Liste alle kritischen Befunde dieses Laufs.',
-  'Zeige die Timeline für DE-NRW-0107.',
-] as const
+import type { AgentViewportContext } from '@/hooks/useAgentViewportContext'
 
-export const DEFAULT_QUESTION = QUESTION_CHIPS[0]
+export const HERO_SITE_ID = 'DE-NRW-0107'
+
+export function starterPrompts(viewport?: AgentViewportContext): string[] {
+  const selected = viewport?.selectedFinding
+  const explain = selected
+    ? 'Erkläre diesen Befund'
+    : `Warum ist ${HERO_SITE_ID} kritisch?`
+  const notion = selected
+    ? 'Schreibe diesen Befund in Notion'
+    : `Schreibe ${HERO_SITE_ID} in Notion`
+  return [
+    explain,
+    'Welche Quelle belegt das?',
+    'Nächste Schritte vorschlagen',
+    notion,
+  ]
+}

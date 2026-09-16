@@ -1,5 +1,4 @@
-import { Card, CardContent } from '@/components/ui/card'
-import type { AnalysisSummary, Diff } from '../types'
+import type { AnalysisSummary, Diff } from '@/types'
 
 type RunStripProps = {
   kpis: Record<string, number> | undefined
@@ -9,79 +8,76 @@ type RunStripProps = {
   onSelectRun: (id: number) => void
 }
 
-const KPI_LABELS: Array<{ key: string; label: string; warn?: boolean }> = [
-  { key: 'sites_total', label: 'Standorte' },
-  { key: 'findings_total', label: 'Befunde' },
-  { key: 'findings_critical', label: 'Kritisch', warn: true },
-  { key: 'sites_with_sla_risk', label: 'SLA-Risiko', warn: true },
-]
-
 export function RunStrip({ kpis, diff, analyses, analysisId, onSelectRun }: RunStripProps) {
+  const totalSites = kpis?.sites_total ?? 0
+  const critical = kpis?.findings_critical ?? 0
+  const warnings = kpis?.findings_warning ?? 0
+  const atRisk = kpis?.sites_with_sla_risk ?? critical
+  const onPlanPercent =
+    totalSites > 0
+      ? Math.max(0, Math.round(((totalSites - atRisk) / totalSites) * 100))
+      : 0
+  const summary = [
+    { label: 'Standorte', value: totalSites, tone: '' },
+    { label: 'kritisch', value: critical, tone: 'text-[var(--critical)]' },
+    { label: 'Warnungen', value: warnings, tone: 'text-[var(--warning)]' },
+    { label: 'im Plan', value: `${onPlanPercent} %`, tone: 'text-[var(--success)]' },
+  ]
+
   if (!kpis) {
+    if (analysisId == null) {
+      return (
+        <p className="border-y border-border py-4 text-sm text-muted-foreground">
+          Starten Sie eine Analyse, um Kennzahlen und Laufvergleiche zu sehen.
+        </p>
+      )
+    }
     return (
-      <p className="text-sm text-muted-foreground">
-        Analyse starten, um Workbooks in die Ausnahme-Warteschlange zu überführen.
-      </p>
+      <div
+        className="h-12 animate-pulse border-y border-border bg-muted/60"
+        aria-label="Kennzahlen werden geladen"
+      />
     )
   }
 
   return (
-    <section className="space-y-3" aria-label="Lauf-Kennzahlen">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {KPI_LABELS.map(({ key, label, warn }) => (
-          <Card key={key}>
-            <CardContent className="pt-4">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-              <p
-                className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${
-                  warn ? 'text-[var(--warn)]' : 'text-foreground'
-                }`}
-              >
-                {kpis[key] ?? '—'}
-              </p>
-            </CardContent>
-          </Card>
+    <section
+      aria-label="Lauf-Kennzahlen"
+      className="flex min-h-12 flex-wrap items-center gap-x-5 gap-y-2 border-y border-border py-2.5"
+    >
+      <div className="flex flex-1 flex-wrap items-center gap-x-5 gap-y-2">
+        {summary.map((metric) => (
+          <div key={metric.label} className="flex items-baseline gap-1.5 whitespace-nowrap">
+            <strong
+              className={`font-mono text-base font-semibold tabular-nums ${metric.tone}`}
+            >
+              {metric.value}
+            </strong>
+            <span className="text-xs text-muted-foreground">{metric.label}</span>
+          </div>
         ))}
       </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 text-sm text-muted-foreground">
-        {diff?.compared_to_run_id != null && (
-          <p>
-            Seit Lauf #{diff.compared_to_run_id}:{' '}
-            <strong className="text-[var(--warn)]">{diff.new_count} neu</strong> ·{' '}
-            <strong className="text-foreground">{diff.resolved_count} erledigt</strong> ·{' '}
-            {diff.persisting_count} unverändert
-          </p>
-        )}
-        {analyses && analyses.length > 1 && (
-          <div className="flex items-center gap-2">
-            <label htmlFor="run-select" className="text-xs uppercase tracking-wider">
-              Lauf
-            </label>
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <span>
+          {diff?.compared_to_run_id != null
+            ? `Gegen Lauf #${diff.compared_to_run_id}: ${diff.new_count} neu, ${diff.resolved_count} erledigt, ${diff.persisting_count} unverändert`
+            : 'Erster Lauf oder kein Vergleich verfügbar'}
+        </span>
+        {analyses && analyses.length > 0 && (
+          <label className="flex items-center gap-2">
+            <span>Lauf</span>
             <select
-              id="run-select"
               value={analysisId ?? ''}
-              onChange={(e) => onSelectRun(Number(e.target.value))}
-              className="h-8 rounded-md border border-input bg-card px-2 text-sm"
+              onChange={(event) => onSelectRun(Number(event.target.value))}
+              className="h-7 rounded-md border border-input bg-[var(--surface-raised)] px-2 font-mono text-xs text-foreground"
             >
-              {analyses.map((a) => (
-                <option key={a.id} value={a.id}>
-                  #{a.id}
-                  {a.created_at
-                    ? ` · ${new Date(a.created_at).toLocaleString('de-DE', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}`
-                    : ''}
-                  {a.kpis?.findings_critical != null
-                    ? ` · ${a.kpis.findings_critical} kritisch`
-                    : ''}
+              {analyses.map((analysis) => (
+                <option key={analysis.id} value={analysis.id}>
+                  #{analysis.id}
                 </option>
               ))}
             </select>
-          </div>
+          </label>
         )}
       </div>
     </section>
