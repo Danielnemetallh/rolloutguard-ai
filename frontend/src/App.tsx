@@ -3,14 +3,15 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AgentDock } from './components/AgentDock'
 import { Layout } from './components/Layout'
 import { TopBar } from './components/TopBar'
-import { WorkbenchProvider, useWorkbench } from './context/WorkbenchContext'
+import { WorkbenchProvider } from './context/WorkbenchContext'
+import { useWorkbench as useWorkbenchContext } from './context/workbench'
 import { FindingPage } from './pages/FindingPage'
 import { Leitstand } from './pages/Leitstand'
 
 const queryClient = new QueryClient()
 
 function Shell() {
-  const wb = useWorkbench()
+  const wb = useWorkbenchContext()
 
   return (
     <Layout
@@ -24,6 +25,7 @@ function Shell() {
           exportPending={wb.exportPending}
           onAnalyze={wb.onAnalyze}
           onExport={wb.onExport}
+          onRetry={wb.retryBootstrap}
         />
       }
     >
@@ -34,11 +36,13 @@ function Shell() {
       <AgentDock
         analysisId={wb.analysisId}
         question={wb.question}
+        lastQuestion={wb.lastQuestion}
         pending={wb.askPending}
         error={wb.askError}
         result={wb.askResult}
         onQuestionChange={wb.questionChange}
         onSubmit={wb.submitQuestion}
+        onRetry={wb.retryQuestion}
         onEvidenceSelect={wb.highlightEvidence}
       />
     </Layout>

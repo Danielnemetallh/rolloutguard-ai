@@ -4,6 +4,7 @@ import { EvidenceChips } from '@/components/EvidenceChips'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { QUESTION_CHIPS } from '@/lib/agentQuestions'
+import { describeApiError } from '@/lib/api'
 import type { AgentResult } from '../types'
 
 const TOOL_TRACE_LABELS: Record<string, string> = {
@@ -16,22 +17,26 @@ const TOOL_TRACE_LABELS: Record<string, string> = {
 type AgentDockProps = {
   analysisId: number | null
   question: string
+  lastQuestion: string
   pending: boolean
-  error: boolean
+  error: Error | null
   result: AgentResult | undefined
   onQuestionChange: (value: string) => void
   onSubmit: () => void
+  onRetry: () => void
   onEvidenceSelect?: (id: string) => void
 }
 
 export function AgentDock({
   analysisId,
   question,
+  lastQuestion,
   pending,
   error,
   result,
   onQuestionChange,
   onSubmit,
+  onRetry,
   onEvidenceSelect,
 }: AgentDockProps) {
   const [open, setOpen] = useState(false)
@@ -90,7 +95,23 @@ export function AgentDock({
               </Button>
             </form>
             {error && (
-              <p className="text-sm text-[var(--warn)]">Agent-Anfrage fehlgeschlagen.</p>
+              <div className="space-y-2 text-sm text-[var(--warn)]" role="alert">
+                <p>Agent-Anfrage fehlgeschlagen: {describeApiError(error)}</p>
+                {lastQuestion && (
+                  <p className="text-xs text-muted-foreground">
+                    Letzte Frage: {lastQuestion}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onRetry}
+                  disabled={pending || !analysisId}
+                >
+                  Erneut versuchen
+                </Button>
+              </div>
             )}
             {result && (
               <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
@@ -101,8 +122,8 @@ export function AgentDock({
                       Tool-Ablauf
                     </p>
                     <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">
-                      {result.result.tool_trace.map((t) => (
-                        <li key={t}>{TOOL_TRACE_LABELS[t] ?? t}</li>
+                      {result.result.tool_trace.map((t, index) => (
+                        <li key={`${t}-${index}`}>{TOOL_TRACE_LABELS[t] ?? t}</li>
                       ))}
                     </ul>
                   </div>

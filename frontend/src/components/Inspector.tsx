@@ -5,6 +5,7 @@ import { EvidenceChips } from '@/components/EvidenceChips'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { describeApiError } from '@/lib/api'
 import { statusLabel, timelineLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import type { ExplainResult, Finding, Timeline } from '../types'
@@ -13,15 +14,19 @@ type InspectorProps = {
   selected: Finding | null
   loading?: boolean
   timeline: Timeline | undefined
+  timelineError: Error | null
+  onTimelineRetry: () => void
   explainPending: boolean
+  explainError: Error | null
   reviewPending: boolean
   reviewClosed: boolean
-  reviewError: boolean
+  reviewError: Error | null
   reviewSuccess: boolean
   explainResult: ExplainResult | undefined
   highlightedEvidenceId: string | null
   showBackLink?: boolean
   onExplain: () => void
+  onExplainRetry: () => void
   onApprove: () => void
   onDismiss: () => void
   onEvidenceHighlight: (id: string) => void
@@ -35,7 +40,10 @@ export function Inspector({
   selected,
   loading = false,
   timeline,
+  timelineError,
+  onTimelineRetry,
   explainPending,
+  explainError,
   reviewPending,
   reviewClosed,
   reviewError,
@@ -44,6 +52,7 @@ export function Inspector({
   highlightedEvidenceId,
   showBackLink = false,
   onExplain,
+  onExplainRetry,
   onApprove,
   onDismiss,
   onEvidenceHighlight,
@@ -141,13 +150,24 @@ export function Inspector({
 
               {reviewError && (
                 <p className="text-sm text-[var(--warn)]">
-                  Prüfung konnte nicht gespeichert werden — läuft die API?
+                  Prüfung konnte nicht gespeichert werden: {describeApiError(reviewError)}
                 </p>
               )}
               {reviewSuccess && reviewClosed && (
                 <p className="text-sm text-muted-foreground">
                   Prüfung gespeichert ({statusLabel(selected.status)}).
                 </p>
+              )}
+
+              {explainError && (
+                <div className="flex items-center justify-between gap-3 text-sm text-[var(--warn)]" role="alert">
+                  <span>
+                    KI-Erklärung konnte nicht geladen werden: {describeApiError(explainError)}
+                  </span>
+                  <Button type="button" variant="outline" size="sm" onClick={onExplainRetry}>
+                    Erneut versuchen
+                  </Button>
+                </div>
               )}
 
               {explainResult && (
@@ -206,7 +226,20 @@ export function Inspector({
               </CardContent>
             </Card>
 
-            {timeline && (
+            {timelineError && (
+              <Card>
+                <CardContent className="flex items-center justify-between gap-3 pt-4 text-sm text-[var(--warn)]">
+                  <p role="alert">
+                    Timeline konnte nicht geladen werden: {describeApiError(timelineError)}
+                  </p>
+                  <Button type="button" variant="outline" size="sm" onClick={onTimelineRetry}>
+                    Erneut versuchen
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {timeline && !timelineError && (
               <Card>
                 <CardHeader className="py-3">
                   <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">

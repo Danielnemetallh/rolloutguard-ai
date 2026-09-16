@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Mark } from '@/components/Mark'
 import { Button } from '@/components/ui/button'
+import { describeApiError } from '@/lib/api'
 
 type TopBarProps = {
   isLoading: boolean
@@ -11,6 +12,7 @@ type TopBarProps = {
   exportPending: boolean
   onAnalyze: () => void
   onExport: () => void
+  onRetry: () => void
 }
 
 export function TopBar({
@@ -22,6 +24,7 @@ export function TopBar({
   exportPending,
   onAnalyze,
   onExport,
+  onRetry,
 }: TopBarProps) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
@@ -42,13 +45,16 @@ export function TopBar({
       <div className="flex flex-wrap items-center gap-3">
         {isLoading && <span className="text-sm text-muted-foreground">Verbinde…</span>}
         {error && (
-          <span className="text-sm text-[var(--warn)]">
-            API offline — <code className="font-mono text-xs">scripts/dev-api.ps1</code>
-          </span>
+          <div className="flex items-center gap-2 text-sm text-[var(--warn)]" role="alert">
+            <span>{describeApiError(error)}</span>
+            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+              Erneut versuchen
+            </Button>
+          </div>
         )}
         <Button
           type="button"
-          disabled={!projectId || analyzePending}
+          disabled={isLoading || !!error || !projectId || analyzePending}
           onClick={onAnalyze}
           className="rounded-full"
         >
@@ -57,7 +63,7 @@ export function TopBar({
         <Button
           type="button"
           variant="outline"
-          disabled={!analysisId || exportPending}
+          disabled={isLoading || !!error || !analysisId || exportPending}
           onClick={onExport}
         >
           {exportPending ? 'Exportiere…' : 'Export'}

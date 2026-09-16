@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Queue } from '@/components/Queue'
 import { RunStrip } from '@/components/RunStrip'
-import { useWorkbench } from '@/context/WorkbenchContext'
+import { useWorkbench } from '@/context/workbench'
 
 export function Leitstand() {
   const wb = useWorkbench()
@@ -19,6 +19,7 @@ export function Leitstand() {
       <Queue
         analysisId={wb.analysisId}
         findings={wb.visibleFindings}
+        error={wb.findingsError}
         totalCount={wb.totalCount}
         visibleCount={wb.visibleFindings.length}
         search={wb.search}
@@ -30,6 +31,7 @@ export function Leitstand() {
         onSearchChange={wb.onSearchChange}
         onSeverityChange={wb.onSeverityChange}
         onToggleSort={wb.onToggleSort}
+        onRetry={wb.retryFindings}
         onSelect={(f) => {
           wb.resetExplain()
           void navigate(`/befund/${f.id}`)

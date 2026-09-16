@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
-import { API_BASE } from '@/lib/api'
+import { useCallback, useState } from 'react'
+import { apiFetch } from '@/lib/api'
 import type { Finding, HeroFinding, SortKey } from '../types'
 
 export function useFindingsQueue(
@@ -16,11 +16,10 @@ export function useFindingsQueue(
   const findings = useQuery({
     queryKey: ['findings', analysisId],
     enabled: analysisId != null,
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/analyses/${analysisId}/findings`)
-      if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<{ count: number; findings: Finding[] }>
-    },
+    queryFn: () =>
+      apiFetch<{ count: number; findings: Finding[] }>(
+        `/api/analyses/${analysisId!}/findings`,
+      ),
   })
 
   const findingsLoading =
@@ -46,52 +45,43 @@ export function useFindingsQueue(
       return a[sortKey] < b[sortKey] ? -1 * dir : a[sortKey] > b[sortKey] ? 1 * dir : 0
     })
 
-  const toggleSort = (key: SortKey) => {
+  const toggleSort = useCallback((key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else {
       setSortKey(key)
       setSortDir('asc')
     }
-  }
+  }, [sortKey])
 
   const showHeroHints = analysisId != null && !search.trim() && !!heroFindings?.length
 
-  const matchHeroFinding = (hero: HeroFinding) =>
-    mappedFindings.find(
-      (f) =>
-        f.rule_id === hero.rule_id &&
-        f.site_id === hero.site_id &&
-        f.message === hero.message,
-    ) ?? mappedFindings.find((f) => f.rule_id === hero.rule_id && f.site_id === hero.site_id)
-
-  const queueState = useMemo(
-    () => ({
-      findings: mappedFindings,
-      totalCount: findings.data?.count,
-      visibleFindings,
-      findingsLoading,
-      search,
-      severity,
-      sortKey,
-      sortDir,
-      showHeroHints,
-      matchHeroFinding,
-      onSearchChange: setSearch,
-      onSeverityChange: setSeverity,
-      onToggleSort: toggleSort,
-    }),
-    [
-      mappedFindings,
-      findings.data?.count,
-      visibleFindings,
-      findingsLoading,
-      search,
-      severity,
-      sortKey,
-      sortDir,
-      showHeroHints,
-    ],
+  const matchHeroFinding = useCallback(
+    (hero: HeroFinding) =>
+      mappedFindings.find(
+        (f) =>
+          f.rule_id === hero.rule_id &&
+          f.site_id === hero.site_id &&
+          f.message === hero.message,
+      ) ?? mappedFindings.find((f) => f.rule_id === hero.rule_id && f.site_id === hero.site_id),
+    [mappedFindings],
   )
-
-  return queueState
+  return {
+    findings: mappedFindings,
+    totalCount: findings.data?.count,
+    visibleFindings,
+    findingsLoading,
+    search,
+    severity,
+    sortKey,
+    sortDir,
+    showHeroHints,
+    findingsError: findings.error ?? null,
+    retryFindings: () => {
+      void findings.refetch()
+    },
+    matchHeroFinding,
+    onSearchChange: setSearch,
+    onSeverityChange: setSeverity,
+    onToggleSort: toggleSort,
+  }
 }

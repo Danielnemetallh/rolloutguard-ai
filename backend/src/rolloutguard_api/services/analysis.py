@@ -13,9 +13,23 @@ from sqlalchemy.orm import Session
 
 from rolloutguard_api.core.config import get_settings
 from rolloutguard_api.db import models
-from rolloutguard_api.services.ingest import IngestResult, profile_workbook
+from rolloutguard_api.services.ingest import IngestError, IngestResult, profile_workbook
 from rolloutguard_api.services.reconcile import CanonicalSite, reconcile
 from rolloutguard_api.services.rules import RULE_VERSION, AnalysisResult, evaluate_sites
+
+
+class AnalysisSourceError(ValueError):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        self.code = code
+        self.message = message
+        self.details = details or {}
+        super().__init__(message)
 
 
 def ensure_demo_project(db: Session) -> models.Project:
@@ -141,6 +155,15 @@ def run_analysis_from_paths(
     db.add(batch)
     db.flush()
 
+    batch_dir = Path(settings.upload_dir) / "batches" / f"batch-{batch.id}"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    for key, result in results.items():
+        source_path = paths[key]
+        dest = batch_dir / result.profile.filename
+        if source_path.resolve() != dest.resolve():
+            shutil.copy2(source_path, dest)
+        result.storage_path = dest
+
     for key in ("contract", "schedule", "status"):
         if key in results:
             _persist_ingest(db, batch, results[key])
@@ -198,6 +221,114 @@ def run_analysis_from_paths(
     db.commit()
     db.refresh(run)
     return run, analysis, sites
+
+
+def _resolve_source_file_path(source_file: models.SourceFile) -> Path:
+    stored_path = Path(source_file.storage_key)
+    candidates = [stored_path]
+    if not stored_path.is_absolute():
+        candidates.extend(
+            [
+                Path.cwd() / stored_path,
+                Path(get_settings().upload_dir) / "batches" / source_file.filename,
+            ]
+        )
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if resolved.is_file():
+            return resolved
+
+    raise AnalysisSourceError(
+        "ANALYSIS_SOURCE_MISSING",
+        "Source workbook for this analysis is not available",
+        details={
+            "logical_type": source_file.logical_type,
+            "filename": source_file.filename,
+        },
+    )
+
+
+def _load_sites_from_batch(db: Session, batch_id: int) -> dict[str, CanonicalSite]:
+    source_files = db.query(models.SourceFile).filter_by(batch_id=batch_id).all()
+    paths: dict[str, Path] = {}
+    for source_file in source_files:
+        logical_type = source_file.logical_type
+        if logical_type not in {"contract", "schedule", "status"}:
+            continue
+        if logical_type in paths:
+            raise AnalysisSourceError(
+                "ANALYSIS_SOURCE_DUPLICATE",
+                "Analysis contains duplicate source workbook types",
+                details={"logical_type": logical_type},
+            )
+        paths[logical_type] = _resolve_source_file_path(source_file)
+
+    missing = sorted({"contract", "schedule", "status"} - paths.keys())
+    if missing:
+        raise AnalysisSourceError(
+            "ANALYSIS_SOURCE_INCOMPLETE",
+            "Analysis is missing one or more source workbooks",
+            details={"logical_types": missing},
+        )
+
+    try:
+        results = {logical_type: profile_workbook(path) for logical_type, path in paths.items()}
+    except IngestError as exc:
+        raise AnalysisSourceError(exc.code, exc.message, details=exc.details) from exc
+    return reconcile(results["contract"], results["schedule"], results["status"])
+
+
+def load_sites_for_timeline(
+    db: Session,
+    analysis_id: int | None = None,
+) -> tuple[int | None, dict[str, CanonicalSite]]:
+    effective_analysis_id = analysis_id
+    if effective_analysis_id is None:
+        latest_run = (
+            db.query(models.AnalysisRun)
+            .order_by(models.AnalysisRun.id.desc())
+            .first()
+        )
+        if latest_run is not None:
+            effective_analysis_id = latest_run.id
+
+    if effective_analysis_id is not None:
+        run = db.get(models.AnalysisRun, effective_analysis_id)
+        if run is None:
+            raise AnalysisSourceError(
+                "ANALYSIS_NOT_FOUND",
+                "Analysis run not found",
+                details={"analysis_id": effective_analysis_id},
+            )
+        batch = db.get(models.ImportBatch, run.batch_id)
+        if batch is None:
+            raise AnalysisSourceError(
+                "ANALYSIS_BATCH_NOT_FOUND",
+                "Import batch for this analysis is not available",
+                details={"analysis_id": effective_analysis_id},
+            )
+        return effective_analysis_id, _load_sites_from_batch(db, batch.id)
+
+    settings = get_settings()
+    synthetic_dir = Path(settings.synthetic_dir)
+    paths = {
+        "contract": synthetic_dir / "contract_obligations.xlsx",
+        "schedule": synthetic_dir / "partner_schedule.xlsx",
+        "status": synthetic_dir / "site_project_status.xlsx",
+    }
+    if not all(path.exists() for path in paths.values()):
+        raise AnalysisSourceError("SYNTHETIC_MISSING", "Synthetic data missing")
+
+    try:
+        results = {logical_type: profile_workbook(path) for logical_type, path in paths.items()}
+    except IngestError as exc:
+        raise AnalysisSourceError(exc.code, exc.message, details=exc.details) from exc
+    return None, reconcile(results["contract"], results["schedule"], results["status"])
 
 
 def list_analysis_runs(db: Session, project_id: int) -> list[models.AnalysisRun]:

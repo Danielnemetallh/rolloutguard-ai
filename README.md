@@ -50,11 +50,28 @@ cd ..\frontend; npm ci
 
 5. Open http://localhost:5173 — API docs at http://127.0.0.1:8000/docs
 
-The demo UI and walkthrough scripts ([docs/DEMO.md](docs/DEMO.md), [docs/INTERVIEW.md](docs/INTERVIEW.md)) are in **German**; API paths and rule IDs stay English.
+The demo UI is in **German**; API paths and rule IDs stay English.
 
-**Demo reset:** `.\scripts\demo-reset.ps1`  
-**Demo script:** [docs/DEMO.md](docs/DEMO.md)  
-**Interview guide (DE):** [docs/INTERVIEW.md](docs/INTERVIEW.md)
+**Demo reset:** `.\scripts\demo-reset.ps1`
+
+The reset regenerates synthetic workbooks and removes only local runtime state
+(SQLite files plus incoming, batch, and export directories). Source workbooks,
+fixtures, scripts, and tests are preserved.
+
+## Demo workflow
+
+1. Run `.\scripts\demo-reset.ps1` when a clean local state is needed.
+2. Start the API and frontend with the commands above.
+3. Click **Analyse starten** in the Leitstand.
+4. Filter or search the exception queue and open a finding.
+5. Inspect the source cells and site timeline.
+6. Use **KI erklären** or ask the read-only agent about the selected run.
+7. Confirm **Freigeben** or **Verwerfen** through the two-step review control.
+8. Use **Export** to create the sanitized `.xlsx` and `.md` output.
+
+The current master frontend exposes the Leitstand at `/` and finding details at
+`/befund/:id`. The deterministic mock agent is available offline when
+`LLM_ENABLED=false`; no external provider is required for the demo.
 
 ## Scope / non-goals
 
@@ -72,18 +89,30 @@ multi-provider LLM switching.
 backend/          FastAPI application (uv)
 frontend/         React UI (Vite)
 data/synthetic/   Generated demo workbooks
+data/fixtures/    Derived, attributed test fixtures (synthetic assumptions)
 data/uploads/     Runtime uploads (gitignored)
 scripts/          Local run helpers (no Docker)
-docs/             Demo + interview guides
 ```
 
 ## Tests
 
 ```powershell
 cd backend
-uv run pytest
+uv run pytest --basetemp <writable-task-temp>
 uv run ruff check src tests
 ```
+
+The Kaggle-derived fixture can be checked independently with:
+
+```powershell
+uv run pytest tests/test_kaggle_fixture.py tests/test_api_analysis.py -q --basetemp <writable-task-temp>
+```
+
+The fixture files under `data/fixtures/kaggle_construction/` are derived from
+the attributed Kaggle source data. Project IDs are converted to stable fixture
+site IDs, while dates, partner assignments, contractual values, and status
+values are explicit assumptions for exercising mapping and reconciliation. They
+must not be interpreted as facts from the source dataset.
 
 Live OpenCode Zen smoke (optional, uses `.env` key):
 

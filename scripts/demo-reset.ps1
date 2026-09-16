@@ -5,15 +5,22 @@ Write-Host "== RolloutGuard demo reset ==" -ForegroundColor Cyan
 Set-Location (Join-Path $Root "backend")
 uv run python -m rolloutguard_api.domain.generate_synthetic --out (Join-Path $Root "data\synthetic") --sites 50
 
-# Remove local sqlite demo DB if present
-$DbCandidates = @(
+# Remove only local runtime state. Source workbooks, fixtures, scripts, and tests stay intact.
+$RuntimeCandidates = @(
   (Join-Path $Root "backend\rolloutguard.db"),
-  (Join-Path $Root "rolloutguard.db")
+  (Join-Path $Root "rolloutguard.db"),
+  (Join-Path $Root "data\uploads\incoming"),
+  (Join-Path $Root "data\uploads\batches"),
+  (Join-Path $Root "data\uploads\exports")
 )
-foreach ($db in $DbCandidates) {
-  if (Test-Path $db) {
-    Remove-Item $db -Force
-    Write-Host "Removed $db"
+
+foreach ($runtimePath in $RuntimeCandidates) {
+  if (Test-Path $runtimePath -PathType Container) {
+    Remove-Item $runtimePath -Recurse -Force
+    Write-Host "Removed runtime directory: $runtimePath"
+  } elseif (Test-Path $runtimePath -PathType Leaf) {
+    Remove-Item $runtimePath -Force
+    Write-Host "Removed runtime file: $runtimePath"
   }
 }
 

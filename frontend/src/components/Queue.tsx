@@ -2,6 +2,7 @@ import { Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { describeApiError } from '@/lib/api'
 import { severityBadgeVariant, severityLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import type { Finding, HeroFinding, SortKey } from '../types'
@@ -9,6 +10,7 @@ import type { Finding, HeroFinding, SortKey } from '../types'
 type QueueProps = {
   analysisId: number | null
   findings: Finding[]
+  error: Error | null
   totalCount: number | undefined
   visibleCount: number
   search: string
@@ -20,6 +22,7 @@ type QueueProps = {
   onSearchChange: (value: string) => void
   onSeverityChange: (value: string) => void
   onToggleSort: (key: SortKey) => void
+  onRetry: () => void
   onSelect: (finding: Finding) => void
   onHeroSelect: (hero: HeroFinding) => void
 }
@@ -38,6 +41,7 @@ function sortIndicator(active: boolean, dir: 'asc' | 'desc') {
 export function Queue({
   analysisId,
   findings,
+  error,
   totalCount,
   visibleCount,
   search,
@@ -49,6 +53,7 @@ export function Queue({
   onSearchChange,
   onSeverityChange,
   onToggleSort,
+  onRetry,
   onSelect,
   onHeroSelect,
 }: QueueProps) {
@@ -102,12 +107,24 @@ export function Queue({
             Analyse starten, um die Ausnahme-Warteschlange zu füllen.
           </p>
         )}
-        {analysisId != null && !findings.length && !showHeroHints && (
+        {analysisId != null && !error && !findings.length && !showHeroHints && (
           <p className="py-6 text-sm text-muted-foreground">
             {search.trim()
               ? `Keine Befunde für „${search}".`
               : 'Keine Befunde in diesem Lauf.'}
           </p>
+        )}
+        {analysisId != null && error && (
+          <div className="flex items-center justify-between gap-3 py-6 text-sm text-[var(--warn)]">
+            <p role="alert">Befunde konnten nicht geladen werden: {describeApiError(error)}</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="shrink-0 rounded-md border border-border px-3 py-1.5 text-foreground hover:bg-muted"
+            >
+              Erneut versuchen
+            </button>
+          </div>
         )}
 
         {showHeroHints && heroFindings && heroFindings.length > 0 && (

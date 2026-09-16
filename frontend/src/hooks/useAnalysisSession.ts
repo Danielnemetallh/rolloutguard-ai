@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ANALYSIS_KEY, API_BASE, readStoredAnalysisId } from '@/lib/api'
+import { ANALYSIS_KEY, apiFetch, describeApiError, readStoredAnalysisId } from '@/lib/api'
 import type { Diff, HeroFinding, Meta } from '../types'
 
 type AnalysisSummary = {
@@ -22,38 +22,32 @@ export function useAnalysisSession() {
     else sessionStorage.removeItem(ANALYSIS_KEY)
   }, [analysisId])
 
-  const { data: meta, isLoading, error } = useQuery({
+  const {
+    data: meta,
+    isLoading: metaLoading,
+    error: metaError,
+    refetch: refetchMeta,
+  } = useQuery({
     queryKey: ['meta'],
-    queryFn: async (): Promise<Meta> => {
-      const res = await fetch(`${API_BASE}/api/meta`)
-      if (!res.ok) throw new Error(`API ${res.status}`)
-      return res.json()
-    },
+    queryFn: () => apiFetch<Meta>('/api/meta'),
     retry: 1,
   })
 
   const projects = useQuery({
     queryKey: ['projects'],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/projects`)
-      if (!res.ok) throw new Error(`API ${res.status}`)
-      return res.json() as Promise<Array<{ id: number; name: string }>>
-    },
-    enabled: !error,
+    queryFn: () => apiFetch<Array<{ id: number; name: string }>>('/api/projects'),
+    enabled: !metaError,
   })
 
   const analyze = useMutation({
-    mutationFn: async (projectId: number) => {
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyze-synthetic`, {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<{
+    mutationFn: (projectId: number) =>
+      apiFetch<{
         analysis_run_id: number
         kpis: Record<string, number>
         hero_findings: HeroFinding[]
-      }>
-    },
+      }>(`/api/projects/${projectId}/analyze-synthetic`, {
+        method: 'POST',
+      }),
     onSuccess: (data) => {
       setAnalysisId(data.analysis_run_id)
       setHeroFindings(data.hero_findings)
@@ -61,17 +55,14 @@ export function useAnalysisSession() {
       void qc.invalidateQueries({ queryKey: ['findings'] })
       void qc.invalidateQueries({ queryKey: ['analyses'] })
     },
-    onError: () => toast.error('Analyse fehlgeschlagen — läuft die API?'),
+    onError: (error) => toast.error(describeApiError(error)),
   })
 
   const exportRun = useMutation({
-    mutationFn: async (runId: number) => {
-      const res = await fetch(`${API_BASE}/api/analyses/${runId}/exports`, { method: 'POST' })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<{ format?: string }>
-    },
+    mutationFn: (runId: number) =>
+      apiFetch<{ format?: string }>(`/api/analyses/${runId}/exports`, { method: 'POST' }),
     onSuccess: () => toast.success('Export nach data/uploads/exports/ geschrieben'),
-    onError: () => toast.error('Export fehlgeschlagen'),
+    onError: (error) => toast.error(describeApiError(error)),
   })
 
   const projectId = projects.data?.[0]?.id
@@ -79,32 +70,39 @@ export function useAnalysisSession() {
   const analyses = useQuery({
     queryKey: ['analyses', projectId],
     enabled: !!projectId,
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyses`)
-      if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<{ count: number; analyses: AnalysisSummary[] }>
-    },
+    queryFn: () =>
+      apiFetch<{ count: number; analyses: AnalysisSummary[] }>(
+        `/api/projects/${projectId!}/analyses`,
+      ),
   })
 
   const diff = useQuery({
     queryKey: ['diff', analysisId],
     enabled: analysisId != null,
-    queryFn: async (): Promise<Diff> => {
-      const res = await fetch(`${API_BASE}/api/analyses/${analysisId}/diff`)
-      if (!res.ok) throw new Error(await res.text())
-      return res.json()
-    },
+    queryFn: () => apiFetch<Diff>(`/api/analyses/${analysisId!}/diff`),
   })
+
+  const selectAnalysis = (id: number | null) => {
+    setAnalysisId(id)
+    setHeroFindings(undefined)
+  }
+
+  useEffect(() => {
+    if (!analyses.data || analyze.isPending || analyses.isFetching) return
+    if (analysisId != null && analyses.data.analyses.some((run) => run.id === analysisId)) return
+    setAnalysisId(analyses.data.analyses[0]?.id ?? null)
+    setHeroFindings(undefined)
+  }, [analyses.data, analyses.isFetching, analyze.isPending, analysisId])
 
   const activeSummary = analyses.data?.analyses.find((a) => a.id === analysisId)
   const kpis = activeSummary?.kpis ?? analyze.data?.kpis
 
   return {
     meta,
-    isLoading,
-    error: error ?? null,
+    isLoading: metaLoading || projects.isLoading,
+    error: metaError ?? projects.error ?? null,
     analysisId,
-    setAnalysisId,
+    setAnalysisId: selectAnalysis,
     projectId,
     analyzePending: analyze.isPending,
     exportPending: exportRun.isPending,
@@ -112,6 +110,10 @@ export function useAnalysisSession() {
     diff: diff.data,
     analyses: analyses.data?.analyses,
     heroFindings,
+    retryBootstrap: () => {
+      void refetchMeta()
+      void projects.refetch()
+    },
     onAnalyze: (onSuccess?: () => void) => {
       if (!projectId) return
       analyze.mutate(projectId, { onSuccess: () => onSuccess?.() })
