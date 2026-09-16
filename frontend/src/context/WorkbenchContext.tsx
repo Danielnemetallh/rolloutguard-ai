@@ -69,7 +69,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       savedAgentSessions: agent.savedSessions,
       explainPending: actions.explainPending,
       reviewPending: actions.reviewPending,
-      reviewError: actions.reviewError,
+      reviewError: Boolean(actions.reviewError),
       reviewSuccess: actions.reviewSuccess,
       explainResult: actions.explainResult,
       highlightedEvidenceId,

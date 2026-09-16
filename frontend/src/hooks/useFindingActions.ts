@@ -1,49 +1,53 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Dispatch, SetStateAction } from 'react'
+import { useRef, type Dispatch, type SetStateAction } from 'react'
 import { toast } from 'sonner'
-import { API_BASE } from '@/lib/api'
+import { apiFetch, describeApiError } from '@/lib/api'
 import type { ExplainResult } from '../types'
 
 export function useFindingActions(
   setStatusOverrides: Dispatch<SetStateAction<Record<number, string>>>,
 ) {
   const qc = useQueryClient()
+  const lastExplainFindingId = useRef<number | null>(null)
 
   const review = useMutation({
-    mutationFn: async (args: { id: number; decision: string; reason: string }) => {
-      const res = await fetch(`${API_BASE}/api/findings/${args.id}/reviews`, {
+    mutationFn: (args: { id: number; decision: string; reason: string }) =>
+      apiFetch<{ finding_id: number; status: string }>(`/api/findings/${args.id}/reviews`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision: args.decision, reason: args.reason }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<{ finding_id: number; status: string }>
-    },
+      }),
     onSuccess: (data) => {
       setStatusOverrides((prev) => ({ ...prev, [data.finding_id]: data.status }))
       toast.success('Prüfung gespeichert')
       void qc.invalidateQueries({ queryKey: ['findings'] })
     },
-    onError: () => toast.error('Prüfung konnte nicht gespeichert werden'),
+    onError: (error) => toast.error(describeApiError(error)),
   })
 
   const explain = useMutation({
-    mutationFn: async (findingId: number) => {
-      const res = await fetch(`${API_BASE}/api/findings/${findingId}/explain`, {
+    mutationFn: (findingId: number) =>
+      apiFetch<ExplainResult>(`/api/findings/${findingId}/explain`, {
         method: 'POST',
-      })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json() as Promise<ExplainResult>
-    },
+      }),
   })
+
+  const explainFinding = (id: number) => {
+    lastExplainFindingId.current = id
+    explain.mutate(id)
+  }
 
   return {
     explainPending: explain.isPending,
     reviewPending: review.isPending,
-    reviewError: review.isError,
+    reviewError: review.error ?? null,
     reviewSuccess: review.isSuccess,
+    explainError: explain.error ?? null,
     explainResult: explain.data,
-    explainFinding: (id: number) => explain.mutate(id),
+    explainFinding,
+    retryExplain: () => {
+      if (lastExplainFindingId.current != null) explain.mutate(lastExplainFindingId.current)
+    },
     approveFinding: (id: number) =>
       review.mutate({
         id,
@@ -56,6 +60,10 @@ export function useFindingActions(
         decision: 'dismiss',
         reason: 'Falsch positiv / bereits erledigt',
       }),
-    resetExplain: () => explain.reset(),
+    resetExplain: () => {
+      lastExplainFindingId.current = null
+      explain.reset()
+    },
+    resetReview: () => review.reset(),
   }
 }

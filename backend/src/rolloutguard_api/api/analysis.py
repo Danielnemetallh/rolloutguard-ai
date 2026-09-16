@@ -14,17 +14,17 @@ from rolloutguard_api.core.config import get_settings
 from rolloutguard_api.db import models
 from rolloutguard_api.db.session import get_db
 from rolloutguard_api.services.analysis import (
+    AnalysisSourceError,
     diff_against_previous,
     ensure_demo_project,
     findings_to_dicts,
     list_analysis_runs,
+    load_sites_for_timeline,
     run_analysis_from_paths,
-    workbook_paths_for_analysis,
 )
 from rolloutguard_api.services.documents import ingest_document
 from rolloutguard_api.services.export import export_analysis
-from rolloutguard_api.services.ingest import IngestError, profile_workbook
-from rolloutguard_api.services.reconcile import reconcile
+from rolloutguard_api.services.ingest import IngestError
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -281,13 +281,18 @@ def site_timeline(
     analysis_id: int | None = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """Rebuild timeline from the selected run's workbooks, with synthetic fallback."""
-    paths = workbook_paths_for_analysis(db, analysis_id)
-    if not all(p.exists() for p in paths.values()):
-        raise AppError("SYNTHETIC_MISSING", "Synthetische Daten fehlen", status_code=404)
-
-    results = {k: profile_workbook(p) for k, p in paths.items()}
-    sites = reconcile(results["contract"], results["schedule"], results["status"])
+    """Rebuild the timeline from the selected run's persisted source workbooks."""
+    try:
+        effective_analysis_id, sites = load_sites_for_timeline(db, analysis_id)
+    except AnalysisSourceError as exc:
+        status_code = 404 if exc.code in {
+            "ANALYSIS_NOT_FOUND",
+            "ANALYSIS_BATCH_NOT_FOUND",
+            "ANALYSIS_SOURCE_MISSING",
+            "ANALYSIS_SOURCE_INCOMPLETE",
+            "SYNTHETIC_MISSING",
+        } else 400
+        raise AppError(exc.code, exc.message, status_code=status_code, details=exc.details) from exc
     site = sites.get(site_id)
     if not site:
         raise AppError(
@@ -298,8 +303,8 @@ def site_timeline(
         )
 
     findings = []
-    if analysis_id:
-        findings = findings_to_dicts(analysis_id, db, site_id=site_id)
+    if effective_analysis_id:
+        findings = findings_to_dicts(effective_analysis_id, db, site_id=site_id)
 
     fibre = site.fibre_ready_date.isoformat() if site.fibre_ready_date else None
     planned = site.planned_date.isoformat() if site.planned_date else None

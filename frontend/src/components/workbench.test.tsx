@@ -439,8 +439,8 @@ describe('agent sidebar', () => {
     const cancelCall = vi.mocked(fetch).mock.calls.find(([url]) =>
       String(url).includes('/assistant/queries/cancel'),
     )
-    expect(cancelCall).toBeTruthy()
-    expect(JSON.parse(String((cancelCall?.[1] as RequestInit).body))).toMatchObject({
+    if (!cancelCall) throw new Error('Expected cancellation request')
+    expect(JSON.parse(String((cancelCall[1] as RequestInit).body))).toMatchObject({
       analysis_run_id: 4,
     })
     vi.unstubAllGlobals()
