@@ -1,0 +1,97 @@
+{
+  "source": {
+    "forms": {
+      "path": "C:\\Users\\Dania\\Downloads\\archive\\Construction_Data_PM_Forms_All_Projects.csv",
+      "sha256": "b4259a43df6bf2890e21c7935bb9b560b361f63f6d5cc34110c4e6d979443ef8",
+      "rows": 10254
+    },
+    "tasks": {
+      "path": "C:\\Users\\Dania\\Downloads\\archive\\Construction_Data_PM_Tasks_All_Projects.csv",
+      "sha256": "37571f7dacd1614fa560525d369013316cbc66958598557c042022100bf37267",
+      "rows": 12424
+    }
+  },
+  "projects": {
+    "1328": {
+      "site_id": "KAGGLE-DE-1328",
+      "partner_id": "PARTNER-NORTH",
+      "form_rows": 4043,
+      "task_rows": 3751,
+      "derived_start_date": "2019-02-26",
+      "derived_last_update": "2020-09-15"
+    },
+    "1329": {
+      "site_id": "KAGGLE-DE-1329",
+      "partner_id": "PARTNER-SOUTH",
+      "form_rows": 1212,
+      "task_rows": 478,
+      "derived_start_date": "2019-06-19",
+      "derived_last_update": "2020-09-14"
+    },
+    "1330": {
+      "site_id": "KAGGLE-DE-1330",
+      "partner_id": "PARTNER-EAST",
+      "form_rows": 2149,
+      "task_rows": 3684,
+      "derived_start_date": "2019-06-05",
+      "derived_last_update": "2020-09-15"
+    },
+    "1335": {
+      "site_id": "KAGGLE-DE-1335",
+      "partner_id": "PARTNER-NORTH",
+      "form_rows": 804,
+      "task_rows": 1267,
+      "derived_start_date": "2019-10-11",
+      "derived_last_update": "2020-09-16"
+    },
+    "1338": {
+      "site_id": "KAGGLE-DE-1338",
+      "partner_id": "PARTNER-SOUTH",
+      "form_rows": 510,
+      "task_rows": 1308,
+      "derived_start_date": "2020-02-13",
+      "derived_last_update": "2020-09-15"
+    },
+    "1340": {
+      "site_id": "KAGGLE-DE-1340",
+      "partner_id": "PARTNER-EAST",
+      "form_rows": 744,
+      "task_rows": 995,
+      "derived_start_date": "2020-02-25",
+      "derived_last_update": "2020-09-15"
+    },
+    "1343": {
+      "site_id": "KAGGLE-DE-1343",
+      "partner_id": "PARTNER-NORTH",
+      "form_rows": 396,
+      "task_rows": 381,
+      "derived_start_date": "2020-03-19",
+      "derived_last_update": "2020-09-15"
+    },
+    "1345": {
+      "site_id": "KAGGLE-DE-1345",
+      "partner_id": "PARTNER-SOUTH",
+      "form_rows": 396,
+      "task_rows": 560,
+      "derived_start_date": "2020-02-20",
+      "derived_last_update": "2020-09-15"
+    }
+  },
+  "outputs": {
+    "contract": {
+      "filename": "kaggle_contract_obligations.xlsx",
+      "sha256": "def6b48f8118a3957bd804bbd32b14ebea83df355ffd79bb9056fb8c40ce541a",
+      "rows": 8
+    },
+    "schedule": {
+      "filename": "kaggle_partner_schedule.xlsx",
+      "sha256": "2370f0ecd2487da78aa587a51c81f8ca0b550b0c256c249dc86fed12e392c43b",
+      "rows": 8
+    },
+    "status": {
+      "filename": "kaggle_site_project_status.xlsx",
+      "sha256": "cb092ff94df4a0b040d328eed09eb37fa46386641cda06bc657ee92405856fd6",
+      "rows": 8
+    }
+  }
+}
